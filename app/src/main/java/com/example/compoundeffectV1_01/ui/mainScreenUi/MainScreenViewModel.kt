@@ -8,13 +8,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.appSystemInfo.AppSystemInfoRepository
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.event.EventRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class MainScreenViewModel(
+@HiltViewModel
+class MainScreenViewModel @Inject constructor(
     private val eventRepository: EventRepository,
     private val appSystemInfoRepository: AppSystemInfoRepository
 ) : ViewModel() {

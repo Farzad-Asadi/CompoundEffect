@@ -8,6 +8,7 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.appSystemInfo.Ap
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.event.Event
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.event.EventRepository
 import com.example.compoundeffectV1_01.utils.createTimeForSampleEvents
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,11 +17,11 @@ import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.LocalDateTime
 import java.util.Calendar
+import javax.inject.Inject
 
-
-class ScheduleScreenViewModel(
+@HiltViewModel
+class ScheduleScreenViewModel @Inject constructor(
     private val eventRepository: EventRepository,
-    private val appSystemInfoRepository: AppSystemInfoRepository
 ) : ViewModel() {
 
 

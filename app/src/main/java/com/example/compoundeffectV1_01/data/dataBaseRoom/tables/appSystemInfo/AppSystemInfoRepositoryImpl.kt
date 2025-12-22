@@ -1,6 +1,8 @@
 package com.example.compoundeffectV1_01.data.dataBaseRoom.tables.appSystemInfo
 
-class OfflineAppSystemInfoRepository (
+import javax.inject.Inject
+
+class AppSystemInfoRepositoryImpl @Inject constructor(
     private val systemDao: SystemDao
 ): AppSystemInfoRepository {
     override suspend fun insertAppSystemInfo(appSystemInfo: AppSystemInfo) =

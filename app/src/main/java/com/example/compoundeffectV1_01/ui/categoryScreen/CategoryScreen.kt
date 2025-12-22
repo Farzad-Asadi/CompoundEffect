@@ -84,8 +84,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.compoundeffectV1_01.AppViewModelProvider
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.category.CategoryEntity
 import com.example.compoundeffectV1_01.data.dataBaseRoom.typeConvertor.iconNameToImageVector
 import com.example.compoundeffectV1_01.utils.LoadingScreen
@@ -100,7 +99,7 @@ fun CategoryScreen(
     modifier: Modifier = Modifier,
     fabClicked: String?,
     onDismissRequest: () -> Unit,
-    viewModel: CategoryScreenViewModel = viewModel(factory = AppViewModelProvider.factory)
+    viewModel: CategoryScreenViewModel = hiltViewModel()
 ) {
     // region متغییرها
     val categoryUiState by viewModel.categoryUiState.collectAsState()

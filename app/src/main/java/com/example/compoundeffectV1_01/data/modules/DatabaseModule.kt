@@ -20,9 +20,12 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, "compound_effect_db")
-            .fallbackToDestructiveMigration()
-            .build()
+        AppDatabase.getDatabase(context)
+
+
+
+
+
 
     @Provides fun provideCategoryDao(db: AppDatabase): CategoryDao = db.categoryDao()
     @Provides fun provideEventDao(db: AppDatabase): EventDao = db.eventDao()

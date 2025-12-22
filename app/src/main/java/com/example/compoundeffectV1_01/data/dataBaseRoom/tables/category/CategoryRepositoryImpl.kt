@@ -1,9 +1,10 @@
 package com.example.compoundeffectV1_01.data.dataBaseRoom.tables.category
 
 import kotlinx.coroutines.flow.Flow
+import javax.inject.Inject
 
 
-class CategoryRepositoryImpl(
+class CategoryRepositoryImpl @Inject constructor(
     private val categoryDao: CategoryDao
 ) : CategoryRepository {
     override suspend fun insertCategory(vararg categoryEntity: CategoryEntity) =

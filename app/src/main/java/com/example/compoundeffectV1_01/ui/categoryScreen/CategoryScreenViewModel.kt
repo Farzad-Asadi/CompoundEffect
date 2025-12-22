@@ -13,16 +13,17 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.category.Categor
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.category.CategoryRepository
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.event.EventRepository
 import com.example.compoundeffectV1_01.utils.colorToString
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class CategoryScreenViewModel(
+@HiltViewModel
+class CategoryScreenViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
-    private val eventRepository: EventRepository,
-    private val appSystemInfoRepository: AppSystemInfoRepository
 ) : ViewModel() {
 
 

@@ -72,8 +72,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.compoundeffectV1_01.AppViewModelProvider
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.event.Event
 import com.example.compoundeffectV1_01.utils.EventTimeFormatter
 import com.example.compoundeffectV1_01.utils.HourFormatter
@@ -99,7 +98,7 @@ import kotlin.math.roundToInt
 @Composable
 fun ScheduleScreen(
     modifier: Modifier = Modifier,
-    viewModel: ScheduleScreenViewModel = viewModel(factory = AppViewModelProvider.factory)
+    viewModel: ScheduleScreenViewModel =hiltViewModel()
 ) {
     // region متغییرها
     val dashboardUiState by viewModel.dashboardUiState.collectAsState()

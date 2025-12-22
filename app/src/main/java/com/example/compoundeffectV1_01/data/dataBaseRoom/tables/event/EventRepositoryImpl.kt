@@ -3,8 +3,9 @@ package com.example.compoundeffectV1_01.data.dataBaseRoom.tables.event
 
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDateTime
+import javax.inject.Inject
 
-class OfflineEventRepository(
+class EventRepositoryImpl @Inject constructor(
     private val eventDao: EventDao
 ) : EventRepository {
 

@@ -49,8 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.compoundeffectV1_01.AppViewModelProvider
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.compoundeffectV1_01.ui.categoryScreen.CategoryScreen
 import com.example.compoundeffectV1_01.ui.scheduleScreen.ScheduleScreen
 
@@ -58,7 +57,7 @@ import com.example.compoundeffectV1_01.ui.scheduleScreen.ScheduleScreen
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
-    viewModel: MainScreenViewModel = viewModel(factory = AppViewModelProvider.factory)
+    viewModel: MainScreenViewModel = hiltViewModel()
 ) {
 
     // region متغییرها
