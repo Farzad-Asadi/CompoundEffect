@@ -86,7 +86,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.compoundeffectV1_01.AppViewModelProvider
-import com.example.compoundeffectV1_01.data.room.category.Category
+import com.example.compoundeffectV1_01.data.room.category.CategoryEntity
 import com.example.compoundeffectV1_01.utils.LoadingScreen
 import com.example.compoundeffectV1_01.utils.colorsOfCategory
 import com.example.compoundeffectV1_01.utils.stringToColor
@@ -139,8 +139,8 @@ fun CategoryScreen(
                 ) + fadeOut(animationSpec = animationSpecForFade)
             ) {
                 AddCategory(
-                    newCategory = categoryUiState.newCategory,
-                    categoryList = categoryUiState.categoryList,
+                    newCategoryEntity = categoryUiState.newCategoryEntity,
+                    categoryEntityList = categoryUiState.categoryEntityList,
                     onClickBack = {
                         showAddCategory =
                             false;onDismissRequest();viewModel.handleAddCategory(back = true)
@@ -165,7 +165,7 @@ fun CategoryScreen(
                     onDismissRequest = { showAddParentInAddCategory = false },
                     content = {
                         AddParentInAddCategory(
-                            sortedCategoryWhitGeneration = categoryUiState.sortedCategoryWhitGeneration,
+                            sortedCategoryEntityWhitGeneration = categoryUiState.sortedCategoryEntityWhitGeneration,
                             onClickCategoryExpand={categoryId: Int,isExtended :Boolean->
                                 viewModel.onClickExpandInCategoryListInCategoryScreen(categoryId,isExtended) },
                             onClickParentInAddParent = {
@@ -219,14 +219,14 @@ fun CategoryScreen(
                 !showAddDescriptionInAddCategory
             ) {
                 CategoryContent(
-                    categoryList = categoryUiState.categoryList,
-                    sortedCategoryWhitGeneration = categoryUiState.sortedCategoryWhitGeneration,
+                    categoryEntityList = categoryUiState.categoryEntityList,
+                    sortedCategoryEntityWhitGeneration = categoryUiState.sortedCategoryEntityWhitGeneration,
                     resetKey = categoryUiState.resetKey,
                     categoryOffsetMap = categoryUiState.categoryOffset,
                     onClickCategoryExpand = {categoryId: Int,isExtended :Boolean->
                         viewModel.onClickExpandInCategoryListInCategoryScreen(categoryId,isExtended) },
-                    onDragCategoryInList = { category: Category, offsetX: Float, offsetY: Float, endDrag: Boolean ->
-                        viewModel.drugCategoryInCategoryContent(category, offsetX, offsetY, endDrag)
+                    onDragCategoryInList = { categoryEntity: CategoryEntity, offsetX: Float, offsetY: Float, endDrag: Boolean ->
+                        viewModel.drugCategoryInCategoryContent(categoryEntity, offsetX, offsetY, endDrag)
                     },
                     onClickDeleteCategory = {viewModel.onClickDeleteCategory(it)}
                 )
@@ -241,20 +241,20 @@ fun CategoryScreen(
 
 @Composable
 fun CategoryContent(
-    categoryList: List<Category>,
-    sortedCategoryWhitGeneration: Map<Category, Int>,
+    categoryEntityList: List<CategoryEntity>,
+    sortedCategoryEntityWhitGeneration: Map<CategoryEntity, Int>,
     categoryOffsetMap: Map<Int?, Pair<Float, Float>>,
     modifier: Modifier = Modifier,
     onClickCategoryExpand: (categoryId: Int,isExtended :Boolean) -> Unit,
-    onDragCategoryInList: (category: Category, offsetX: Float, offsetY: Float, endDrag: Boolean) -> Unit,
-    onClickDeleteCategory : (category: Category) -> Unit,
+    onDragCategoryInList: (categoryEntity: CategoryEntity, offsetX: Float, offsetY: Float, endDrag: Boolean) -> Unit,
+    onClickDeleteCategory : (categoryEntity: CategoryEntity) -> Unit,
     resetKey: Boolean = false,
 ) {
 
 
     val offsetValue = 0.06f
 
-    val itemToShowInList=sortedCategoryWhitGeneration.filterKeys { it.visible }
+    val itemToShowInList=sortedCategoryEntityWhitGeneration.filterKeys { it.visible }
 
 
 
@@ -435,8 +435,8 @@ fun CategoryContent(
 
 @Composable
 fun AddCategory(
-    newCategory: Category?,
-    categoryList: List<Category>,
+    newCategoryEntity: CategoryEntity?,
+    categoryEntityList: List<CategoryEntity>,
     onClickBack: () -> Unit,
     onClickConfirm: () -> Unit,
     onValueChangeName: (name: String) -> Unit,
@@ -498,7 +498,7 @@ fun AddCategory(
             IconButton(
                 modifier = Modifier.weight(0.15f),
                 onClick = {
-                    if (newCategory?.name == "") {
+                    if (newCategoryEntity?.name == "") {
                         Toast.makeText(context, "لطفا یک نام وارد کنید", Toast.LENGTH_SHORT).show()
                     } else {
                         onClickConfirm()
@@ -541,7 +541,7 @@ fun AddCategory(
             )
 
             TextField(
-                value = newCategory?.name ?: "",
+                value = newCategoryEntity?.name ?: "",
                 onValueChange = { onValueChangeName(it) },
                 label = { Text("نام گروه") },
                 singleLine = true,
@@ -582,27 +582,27 @@ fun AddCategory(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(                   //parent Icon
-                    imageVector = categoryList.firstOrNull {
-                        it.categoryId == newCategory?.parentCategoryId
+                    imageVector = categoryEntityList.firstOrNull {
+                        it.categoryId == newCategoryEntity?.parentCategoryId
                     }?.icon ?: Icons.Filled.AccountTree,
-                    tint = categoryList.firstOrNull {
-                        it.categoryId == newCategory?.parentCategoryId
+                    tint = categoryEntityList.firstOrNull {
+                        it.categoryId == newCategoryEntity?.parentCategoryId
                     }?.color?.stringToColor() ?: Color(0xFF000000),
                     contentDescription = "AccountTree",
                     modifier = Modifier
                         .weight(0.25f)
                         .fillMaxWidth(0.6f)
                         .clickable {
-                            val parentCategoryId = categoryList.firstOrNull {
-                                it.categoryId == newCategory?.parentCategoryId
+                            val parentCategoryId = categoryEntityList.firstOrNull {
+                                it.categoryId == newCategoryEntity?.parentCategoryId
                             }?.categoryId ?: 1
                             onClickChoseParent(parentCategoryId)
 
                         }
                 )
                 Icon(                   //icon icon
-                    imageVector = newCategory?.icon ?: Icons.Filled.QuestionMark,
-                    tint = newCategory?.color?.stringToColor() ?: Color(0xFF000000),
+                    imageVector = newCategoryEntity?.icon ?: Icons.Filled.QuestionMark,
+                    tint = newCategoryEntity?.color?.stringToColor() ?: Color(0xFF000000),
                     contentDescription = "Route",
                     modifier = Modifier
                         .weight(0.25f)
@@ -611,7 +611,7 @@ fun AddCategory(
                 )
                 Icon(                   //color icon
                     imageVector = Icons.Filled.Circle,
-                    tint = newCategory?.color?.stringToColor() ?: Color(0xFF000000),
+                    tint = newCategoryEntity?.color?.stringToColor() ?: Color(0xFF000000),
                     contentDescription = "Circle",
                     modifier = Modifier
                         .weight(0.25f)
@@ -644,14 +644,14 @@ fun AddCategory(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = categoryList.firstOrNull {
-                            it.categoryId == newCategory?.parentCategoryId
+                        text = categoryEntityList.firstOrNull {
+                            it.categoryId == newCategoryEntity?.parentCategoryId
                         }?.name ?: "ریشه اصلی",
                         modifier = Modifier
                             .weight(0.6f)
                             .clickable {
-                                val parentCategoryId = categoryList.firstOrNull {
-                                    it.categoryId == newCategory?.parentCategoryId
+                                val parentCategoryId = categoryEntityList.firstOrNull {
+                                    it.categoryId == newCategoryEntity?.parentCategoryId
                                 }?.categoryId ?: 1
                                 onClickChoseParent(parentCategoryId)
                             },
@@ -767,14 +767,14 @@ fun AddCategory(
 
 @Composable
 fun AddParentInAddCategory(
-    sortedCategoryWhitGeneration: Map<Category, Int>,
+    sortedCategoryEntityWhitGeneration: Map<CategoryEntity, Int>,
     onClickCategoryExpand: (categoryId: Int,isExtended :Boolean) -> Unit,
     onClickParentInAddParent: (categoryId: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
 
     val offsetValue = 0.06f
-    val itemToShowInList=sortedCategoryWhitGeneration.filterKeys { it.visible }
+    val itemToShowInList=sortedCategoryEntityWhitGeneration.filterKeys { it.visible }
 
     Column(
         modifier = modifier
@@ -890,7 +890,7 @@ fun AddParentInAddCategory(
 
 @Composable
 fun LazyGirdItemsForCategoryContent(
-    category: Category,
+    categoryEntity: CategoryEntity,
     subCategoryCanExpand: Boolean?,
     categoryExpand: Boolean,
     onClickCategoryExpand: () -> Unit,
@@ -898,7 +898,7 @@ fun LazyGirdItemsForCategoryContent(
     resetKey: Boolean = false,
     categoryOffsetPair: Pair<Float, Float>? = null,
     categoryTreePosition: Int = 1,
-    onDragCategoryInList: ((category: Category, offsetX: Float, offsetY: Float, endOfChangBranch: Boolean, endDrag: Boolean) -> Unit)? = null,
+    onDragCategoryInList: ((categoryEntity: CategoryEntity, offsetX: Float, offsetY: Float, endOfChangBranch: Boolean, endDrag: Boolean) -> Unit)? = null,
     onClickParentInAddParent: ((categoryId: Int) -> Unit)? = null,
 
     ) {
@@ -940,7 +940,7 @@ fun LazyGirdItemsForCategoryContent(
                                 offsetY += dragAmount.y
 
                                 onDragCategoryInList(
-                                    category,
+                                    categoryEntity,
                                     offsetX,
                                     offsetY,
                                     subCategoryCanExpand ?: true,
@@ -951,7 +951,7 @@ fun LazyGirdItemsForCategoryContent(
                             onDragCancel = {
 
                                 onDragCategoryInList(
-                                    category,
+                                    categoryEntity,
                                     offsetX,
                                     offsetY,
                                     subCategoryCanExpand ?: true,
@@ -961,7 +961,7 @@ fun LazyGirdItemsForCategoryContent(
                             },
                             onDragEnd = {
                                 onDragCategoryInList(
-                                    category,
+                                    categoryEntity,
                                     offsetX,
                                     offsetY,
                                     subCategoryCanExpand ?: true,
@@ -982,7 +982,7 @@ fun LazyGirdItemsForCategoryContent(
                 .fillMaxWidth()
                 .clickable {
                     if (onClickParentInAddParent != null) {
-                        category.categoryId?.let { onClickParentInAddParent(it) }
+                        categoryEntity.categoryId?.let { onClickParentInAddParent(it) }
                     }
                 },
             verticalAlignment = Alignment.CenterVertically,
@@ -1029,8 +1029,8 @@ fun LazyGirdItemsForCategoryContent(
                 )
             }
             Icon(
-                imageVector = category.icon,
-                tint = category.color.stringToColor(),
+                imageVector = categoryEntity.icon,
+                tint = categoryEntity.color.stringToColor(),
                 contentDescription = "icon",
                 modifier = Modifier
                     .size(55.dp)
@@ -1039,7 +1039,7 @@ fun LazyGirdItemsForCategoryContent(
 
             )
             Text(
-                text = category.name,
+                text = categoryEntity.name,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier

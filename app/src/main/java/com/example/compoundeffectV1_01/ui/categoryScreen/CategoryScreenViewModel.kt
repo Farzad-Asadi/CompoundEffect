@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.compoundeffectV1_01.data.room.appSystemInfo.AppSystemInfoRepository
-import com.example.compoundeffectV1_01.data.room.category.Category
+import com.example.compoundeffectV1_01.data.room.category.CategoryEntity
 import com.example.compoundeffectV1_01.data.room.category.CategoryRepository
 import com.example.compoundeffectV1_01.data.room.event.EventRepository
 import com.example.compoundeffectV1_01.utils.colorToString
@@ -85,7 +85,7 @@ class CategoryScreenViewModel(
         confirm: Boolean = false
     ) {
         val siblingListOfCategory =
-            _categoryUiState.value.sortedCategoryWhitGeneration.keys.filter { it.parentCategoryId == _categoryUiState.value.newCategory?.parentCategoryId }
+            _categoryUiState.value.sortedCategoryEntityWhitGeneration.keys.filter { it.parentCategoryId == _categoryUiState.value.newCategoryEntity?.parentCategoryId }
 
 
         val siblingIndex: Int =
@@ -108,28 +108,28 @@ class CategoryScreenViewModel(
 //        Log.i("TEST", "---------------------------------------")
 
 
-        if (_categoryUiState.value.newCategory != null) {
-            val updateNewCategory = _categoryUiState.value.newCategory!!.copy(
-                name = if (name != "") name else _categoryUiState.value.newCategory!!.name,
+        if (_categoryUiState.value.newCategoryEntity != null) {
+            val updateNewCategory = _categoryUiState.value.newCategoryEntity!!.copy(
+                name = if (name != "") name else _categoryUiState.value.newCategoryEntity!!.name,
                 parentCategoryId = parentId
-                    ?: _categoryUiState.value.newCategory!!.parentCategoryId,
-                icon = icon ?: _categoryUiState.value.newCategory!!.icon,
-                color = color?.colorToString() ?: _categoryUiState.value.newCategory!!.color,
-                siblingIndex = siblingIndex ?: _categoryUiState.value.newCategory!!.siblingIndex
+                    ?: _categoryUiState.value.newCategoryEntity!!.parentCategoryId,
+                icon = icon ?: _categoryUiState.value.newCategoryEntity!!.icon,
+                color = color?.colorToString() ?: _categoryUiState.value.newCategoryEntity!!.color,
+                siblingIndex = siblingIndex ?: _categoryUiState.value.newCategoryEntity!!.siblingIndex
             )
             Log.i("TEST", "updateNewCategory.siblingIndex=${updateNewCategory.siblingIndex}")
             _categoryUiState.update { categoryUiState ->
                 categoryUiState.copy(
-                    newCategory = updateNewCategory
+                    newCategoryEntity = updateNewCategory
                 )
             }
 
             if (confirm ) {
-                val newSiblingListOfCategory= mutableListOf<Category>()
+                val newSiblingListOfCategoryEntity= mutableListOf<CategoryEntity>()
 
                 if (updateNewCategory.siblingIndex == 0){
                     Log.i("TEST", "in if")
-                    newSiblingListOfCategory.addAll(changeSiblingPositionOfSibling(siblingListOfCategory,updateNewCategory,moveCategoryToTopOfList = true))
+                    newSiblingListOfCategoryEntity.addAll(changeSiblingPositionOfSibling(siblingListOfCategory,updateNewCategory,moveCategoryToTopOfList = true))
 
 
                 }
@@ -137,7 +137,7 @@ class CategoryScreenViewModel(
                 viewModelScope.launch {
 
                     val job0 = async {
-                        newSiblingListOfCategory.forEach {
+                        newSiblingListOfCategoryEntity.forEach {
                             categoryRepository.updateCategory(it)
                         }
                     }
@@ -165,20 +165,20 @@ class CategoryScreenViewModel(
     }
 
     private fun changeSiblingPositionOfSibling(
-        siblingListOfCategory: List<Category>,
-        category: Category,
+        siblingListOfCategoryEntity: List<CategoryEntity>,
+        categoryEntity: CategoryEntity,
         moveCategoryToTopOfList:Boolean =false,
         moveCategoryUp:Boolean =false,
         moveCategoryDown:Boolean =false,
-    ) : List<Category>{
-        val newSiblingListOfCategory= mutableListOf<Category>()
+    ) : List<CategoryEntity>{
+        val newSiblingListOfCategoryEntity= mutableListOf<CategoryEntity>()
 
         if (moveCategoryToTopOfList){
-            siblingListOfCategory.forEach {
-                newSiblingListOfCategory.add(it.copy(siblingIndex = it.siblingIndex+1))
+            siblingListOfCategoryEntity.forEach {
+                newSiblingListOfCategoryEntity.add(it.copy(siblingIndex = it.siblingIndex+1))
             }
         }
-        Log.i("TEST", "newSiblingListOfCategory=${newSiblingListOfCategory}")
+        Log.i("TEST", "newSiblingListOfCategory=${newSiblingListOfCategoryEntity}")
 //        if (moveCategoryUp ){
 //
 //            val topSiblingOfCategory=siblingListOfCategory.firstOrNull { it.siblingIndex == siblingIndex-1 }
@@ -197,7 +197,7 @@ class CategoryScreenViewModel(
 //        }
 
 
-        return newSiblingListOfCategory
+        return newSiblingListOfCategoryEntity
     }
 
 
@@ -205,13 +205,13 @@ class CategoryScreenViewModel(
      * کارهایی که با درگ دسته بندی در صفحه دسته بندی اتفاق می افتد.
      */
     fun drugCategoryInCategoryContent(
-        category: Category,
+        categoryEntity: CategoryEntity,
         offsetX: Float,
         offsetY: Float,
         endDrag: Boolean = false
     ) {
         val categoryOffset: Map<Int?, Pair<Float, Float>> =
-            mutableStateMapOf(category.categoryId to Pair(offsetX, offsetY))
+            mutableStateMapOf(categoryEntity.categoryId to Pair(offsetX, offsetY))
         _categoryUiState.update { categoryUiState ->
             categoryUiState.copy(
                 categoryOffset = categoryOffset
@@ -219,10 +219,10 @@ class CategoryScreenViewModel(
         }
 
 
-        val categoryList = _categoryUiState.value.categoryList
-        var sortedCategoryWhitGeneration = _categoryUiState.value.sortedCategoryWhitGeneration
+        val categoryList = _categoryUiState.value.categoryEntityList
+        var sortedCategoryWhitGeneration = _categoryUiState.value.sortedCategoryEntityWhitGeneration
 
-        var changedCategory = categoryList.first { it.categoryId == category.categoryId }
+        var changedCategory = categoryList.first { it.categoryId == categoryEntity.categoryId }
 
         val parentCategory =
             // ریشه اصلی       for firstBranch
@@ -233,7 +233,7 @@ class CategoryScreenViewModel(
 
         val indexOfCategoryInSiblingCategory: Int = siblingCategoryList.indexOf(changedCategory)
 
-        val topCategoryOfSelectedCategory: Category =
+        val topCategoryOfSelectedCategoryEntity: CategoryEntity =
             when {
                 indexOfCategoryInSiblingCategory == 0 -> parentCategory
                 indexOfCategoryInSiblingCategory > 0 -> siblingCategoryList[indexOfCategoryInSiblingCategory - 1]
@@ -243,15 +243,15 @@ class CategoryScreenViewModel(
 
         if (offsetX - _categoryUiState.value.lastParentChangeOffsetX >= 50) {
             if ((sortedCategoryWhitGeneration[changedCategory] ?: 5) <= 5) {
-                topCategoryOfSelectedCategory.let {
-                    changedCategory = category.copy(parentCategoryId = it.categoryId)
+                topCategoryOfSelectedCategoryEntity.let {
+                    changedCategory = categoryEntity.copy(parentCategoryId = it.categoryId)
                     _categoryUiState.value.lastParentChangeOffsetX = offsetX // مقدار جدید ذخیره شود
                 }
             }
         }
         if (offsetX - _categoryUiState.value.lastParentChangeOffsetX <= -50) {
             if ((sortedCategoryWhitGeneration[changedCategory] ?: 2) >= 3) {
-                changedCategory = category.copy(parentCategoryId = parentCategory.parentCategoryId)
+                changedCategory = categoryEntity.copy(parentCategoryId = parentCategory.parentCategoryId)
                 _categoryUiState.value.lastParentChangeOffsetX = offsetX // مقدار جدید ذخیره شود
             }
         }
@@ -311,11 +311,11 @@ class CategoryScreenViewModel(
                         val parentIdOfBelowSibling =
                             siblingCategoryList[1].categoryId
                         changedCategory =
-                            category.copy(
+                            categoryEntity.copy(
                                 isExtended = false,
                                 parentCategoryId = parentIdOfBelowSibling
                             )
-                        val allChildren = getAllChildren(categoryList.toSet(), category)
+                        val allChildren = getAllChildren(categoryList.toSet(), categoryEntity)
 
                         sortedCategoryWhitGeneration = sortedCategoryWhitGeneration.mapKeys {
                             if (it.key in allChildren) {
@@ -370,11 +370,11 @@ class CategoryScreenViewModel(
                 val parentIdOfBelowSibling =
                     siblingCategoryList[indexOfCategoryInSiblingCategory + 1].categoryId
 
-                if (category.expandable) {
+                if (categoryEntity.expandable) {
 
                     changedCategory =
-                        category.copy(isExtended = false, parentCategoryId = parentIdOfBelowSibling)
-                    val allChildren = getAllChildren(categoryList.toSet(), category)
+                        categoryEntity.copy(isExtended = false, parentCategoryId = parentIdOfBelowSibling)
+                    val allChildren = getAllChildren(categoryList.toSet(), categoryEntity)
 
                     sortedCategoryWhitGeneration = sortedCategoryWhitGeneration.mapKeys {
                         if (it.key in allChildren) {
@@ -393,7 +393,7 @@ class CategoryScreenViewModel(
 
 
         val updatedList = categoryList.map { categoryInMap ->
-            if (categoryInMap.categoryId == category.categoryId) {
+            if (categoryInMap.categoryId == categoryEntity.categoryId) {
                 changedCategory
             } else {
                 categoryInMap
@@ -406,7 +406,7 @@ class CategoryScreenViewModel(
         }
         _categoryUiState.update { categoryUiState ->
             categoryUiState.copy(
-                sortedCategoryWhitGeneration = sortedCategoryWhitGeneration,
+                sortedCategoryEntityWhitGeneration = sortedCategoryWhitGeneration,
             )
         }
 
@@ -416,7 +416,7 @@ class CategoryScreenViewModel(
             _categoryUiState.value.lastParentChangeOffsetX = 0f // ریست مقدار ذخیره‌شده
             _categoryUiState.value.lastParentChangeOffsetY = 0f // ریست مقدار ذخیره‌شده
             val newCategoryOffset: Map<Int?, Pair<Float, Float>> =
-                mutableStateMapOf(category.categoryId to Pair(0f, 0f))
+                mutableStateMapOf(categoryEntity.categoryId to Pair(0f, 0f))
 
             _categoryUiState.update { categoryUiState ->
                 categoryUiState.copy(
@@ -450,12 +450,12 @@ class CategoryScreenViewModel(
      */
     fun onClickExpandInCategoryListInCategoryScreen(categoryId: Int, isExtended: Boolean) {
         val category =
-            _categoryUiState.value.sortedCategoryWhitGeneration.keys.firstOrNull { it.categoryId == categoryId }
+            _categoryUiState.value.sortedCategoryEntityWhitGeneration.keys.firstOrNull { it.categoryId == categoryId }
                 ?: return
 
 
         if (isExtended) {
-            val updatedCategoryList = _categoryUiState.value.categoryList.map { categoryInMap ->
+            val updatedCategoryList = _categoryUiState.value.categoryEntityList.map { categoryInMap ->
                 if (categoryInMap.categoryId == categoryId) {
                     categoryInMap.copy(isExtended = false)
                 } else {
@@ -473,14 +473,14 @@ class CategoryScreenViewModel(
             }
             _categoryUiState.update { categoryUiState ->
                 categoryUiState.copy(
-                    categoryList = updateCategoryList,
+                    categoryEntityList = updateCategoryList,
                 )
             }
             saveCategoryToDatabase(updateCategoryList)
 
 
             val updatedSortedCategoryWhitGeneration =
-                _categoryUiState.value.sortedCategoryWhitGeneration.mapKeys {
+                _categoryUiState.value.sortedCategoryEntityWhitGeneration.mapKeys {
                     if (it.key.categoryId == categoryId) {
                         it.key.copy(isExtended = false)
                     } else {
@@ -499,7 +499,7 @@ class CategoryScreenViewModel(
             }
             _categoryUiState.update { categoryUiState ->
                 categoryUiState.copy(
-                    sortedCategoryWhitGeneration = updateSortedCategoryWhitGeneration,
+                    sortedCategoryEntityWhitGeneration = updateSortedCategoryWhitGeneration,
                 )
             }
 
@@ -507,7 +507,7 @@ class CategoryScreenViewModel(
         } else {
 
 
-            val updatedCategoryList = _categoryUiState.value.categoryList.map { categoryInMap ->
+            val updatedCategoryList = _categoryUiState.value.categoryEntityList.map { categoryInMap ->
                 if (categoryInMap.categoryId == categoryId) {
                     categoryInMap.copy(isExtended = true)
                 } else {
@@ -525,14 +525,14 @@ class CategoryScreenViewModel(
             }
             _categoryUiState.update { categoryUiState ->
                 categoryUiState.copy(
-                    categoryList = updateCategoryList,
+                    categoryEntityList = updateCategoryList,
                 )
             }
             saveCategoryToDatabase(updateCategoryList)
 
 
             val updatedSortedCategoryWhitGeneration =
-                _categoryUiState.value.sortedCategoryWhitGeneration.mapKeys {
+                _categoryUiState.value.sortedCategoryEntityWhitGeneration.mapKeys {
                     if (it.key.categoryId == categoryId) {
                         it.key.copy(isExtended = true)
                     } else {
@@ -550,7 +550,7 @@ class CategoryScreenViewModel(
             }
             _categoryUiState.update { categoryUiState ->
                 categoryUiState.copy(
-                    sortedCategoryWhitGeneration = updateSortedCategoryWhitGeneration,
+                    sortedCategoryEntityWhitGeneration = updateSortedCategoryWhitGeneration,
                 )
             }
         }
@@ -576,8 +576,8 @@ class CategoryScreenViewModel(
 
         _categoryUiState.update { categoryUiState ->
             categoryUiState.copy(
-                categoryList = categoryList,
-                sortedCategoryWhitGeneration = sortCategoriesWithGenerations
+                categoryEntityList = categoryList,
+                sortedCategoryEntityWhitGeneration = sortCategoriesWithGenerations
             )
         }
 
@@ -587,9 +587,9 @@ class CategoryScreenViewModel(
      *چک کردن دسته بندی که آیا فرزندی دارد که پارامتر expandable  را ترو کند.
      * @return لیست دسته بندی که پارامتر expandable آن به روز است
      */
-    private fun expandableCheckedCategory(categoryList: List<Category>): List<Category> {
-        val categoryMap = categoryList.groupBy { it.parentCategoryId }
-        val expandableCheckedCategoryList = categoryList.map { category ->
+    private fun expandableCheckedCategory(categoryEntityList: List<CategoryEntity>): List<CategoryEntity> {
+        val categoryMap = categoryEntityList.groupBy { it.parentCategoryId }
+        val expandableCheckedCategoryList = categoryEntityList.map { category ->
             if (categoryMap.keys.contains(category.categoryId)) {
                 category.copy(expandable = true)
             } else {
@@ -608,7 +608,7 @@ class CategoryScreenViewModel(
      * ساخت دسته بندی جدید در دیتاکلاس ویومدل.
      */
     private fun createNewCategory() {
-        val newCategory = Category(
+        val newCategoryEntity = CategoryEntity(
             name = "",
             parentCategoryId = 1,
             icon = Icons.Filled.QuestionMark,
@@ -618,7 +618,7 @@ class CategoryScreenViewModel(
         )
         _categoryUiState.update { categoryUiState ->
             categoryUiState.copy(
-                newCategory = newCategory
+                newCategoryEntity = newCategoryEntity
             )
         }
     }
@@ -626,9 +626,9 @@ class CategoryScreenViewModel(
     /**
      *ذخیره دسته بندی در دیتابیس.
      */
-    private fun saveCategoryToDatabase(categoryList: List<Category>) {
+    private fun saveCategoryToDatabase(categoryEntityList: List<CategoryEntity>) {
         viewModelScope.launch {
-            categoryList.forEach { category ->
+            categoryEntityList.forEach { category ->
                 categoryRepository.updateCategory(category)
             }
         }
@@ -638,20 +638,20 @@ class CategoryScreenViewModel(
      *ایجاد یک مپ از دسته بندی ها وGeneration که sort شده اند .
      * @return یک مپ که دسته بندی ها وGeneration در آن مرتب شده اند
      */
-    private fun sortCategoriesWithGenerations(categoryList: List<Category>): Map<Category, Int> {
+    private fun sortCategoriesWithGenerations(categoryEntityList: List<CategoryEntity>): Map<CategoryEntity, Int> {
 
-        val categoryMap = categoryList.groupBy { it.parentCategoryId }
+        val categoryMap = categoryEntityList.groupBy { it.parentCategoryId }
 
-        val rootCategories = categoryList.filter { it.parentCategoryId == -1 }
-        val generationMap = mutableMapOf<Category, Int>()
-        fun traverseTree(category: Category, generation: Int): List<Category> {
-            val sortedList = mutableListOf<Category>()
+        val rootCategories = categoryEntityList.filter { it.parentCategoryId == -1 }
+        val generationMap = mutableMapOf<CategoryEntity, Int>()
+        fun traverseTree(categoryEntity: CategoryEntity, generation: Int): List<CategoryEntity> {
+            val sortedList = mutableListOf<CategoryEntity>()
 
-            generationMap[category] = generation
-            sortedList.add(category)
+            generationMap[categoryEntity] = generation
+            sortedList.add(categoryEntity)
 
             val children =
-                categoryMap[category.categoryId]?.sortedBy { it.siblingIndex } ?: emptyList()
+                categoryMap[categoryEntity.categoryId]?.sortedBy { it.siblingIndex } ?: emptyList()
             for (child in children) {
                 sortedList.addAll(traverseTree(child, generation + 1)) // پیمایش فرزند با نسل +1
             }
@@ -671,7 +671,7 @@ class CategoryScreenViewModel(
      *پیدا کردن لیست فرزندان.
      * @return لیست فرزندان
      */
-    private fun getAllChildren(allCategories: Set<Category>, parent: Category): List<Category> {
+    private fun getAllChildren(allCategories: Set<CategoryEntity>, parent: CategoryEntity): List<CategoryEntity> {
         val directChildren = allCategories.filter { it.parentCategoryId == parent.categoryId }
 
         // پیدا کردن فرزندهای این فرزندان
@@ -681,10 +681,10 @@ class CategoryScreenViewModel(
     /**
      *پاک کردن دسته بندی
      */
-    fun onClickDeleteCategory(category: Category) {
+    fun onClickDeleteCategory(categoryEntity: CategoryEntity) {
         viewModelScope.launch {
             val job1 = async {
-                categoryRepository.deleteCategory(category)
+                categoryRepository.deleteCategory(categoryEntity)
             }
             job1.await()
             val job2 = async {
@@ -704,12 +704,12 @@ class CategoryScreenViewModel(
 /**
  *  دیتاکلاس ویو مدل.
  *
- * @property newCategory دسته بندی جدید.
+ * @property newCategoryEntity دسته بندی جدید.
  */
 data class CategoryUiState(
-    val categoryList: List<Category> = listOf(),
-    val sortedCategoryWhitGeneration: Map<Category, Int> = mutableStateMapOf(),
-    val newCategory: Category? = null,
+    val categoryEntityList: List<CategoryEntity> = listOf(),
+    val sortedCategoryEntityWhitGeneration: Map<CategoryEntity, Int> = mutableStateMapOf(),
+    val newCategoryEntity: CategoryEntity? = null,
     val categoryOffset: Map<Int?, Pair<Float, Float>> = mutableStateMapOf(),
     var lastParentChangeOffsetX: Float = 0f,
     var lastParentChangeOffsetY: Float = 0f,

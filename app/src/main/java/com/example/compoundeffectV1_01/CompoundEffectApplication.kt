@@ -3,39 +3,31 @@ package com.example.compoundeffectV1_01
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AccountTree
-import androidx.compose.material.icons.filled.AddAPhoto
-import androidx.compose.material.icons.filled.Agriculture
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Boy
-import androidx.compose.material.icons.filled.House
-import androidx.compose.material.icons.filled.Kitchen
-import androidx.compose.material.icons.filled.Route
-import androidx.compose.material.icons.filled.Shower
-import androidx.compose.material.icons.filled.Sports
 import androidx.compose.ui.graphics.Color
 import com.example.compoundeffectV1_01.data.AppContainer
 import com.example.compoundeffectV1_01.data.AppDataContainer
 import com.example.compoundeffectV1_01.data.room.AppDatabase
 import com.example.compoundeffectV1_01.data.room.appSystemInfo.AppSystemInfo
-import com.example.compoundeffectV1_01.data.room.category.Category
+import com.example.compoundeffectV1_01.data.room.category.CategoryEntity
 import com.example.compoundeffectV1_01.data.room.event.Event
 import com.example.compoundeffectV1_01.utils.colorToString
 import com.example.compoundeffectV1_01.utils.createTimeForSampleEvents
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
+import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
-//private const val LAYOUT_PREFERENCE_NAME = "layout_preferences"
-//private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
-//    name = LAYOUT_PREFERENCE_NAME
-//)
 
+@HiltAndroidApp
 class CompoundEffectApplication : Application() {
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
 
     private val database by lazy { AppDatabase.getDatabase(this) }
     lateinit var container: AppContainer
@@ -51,7 +43,6 @@ class CompoundEffectApplication : Application() {
 
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
     private fun checkFirstRun() {
         val isFirstRun = sharedPreferences.getBoolean("is_first_run", true)
         if (isFirstRun) {
@@ -133,8 +124,8 @@ class CompoundEffectApplication : Application() {
             val appSystemInfo = AppSystemInfo()
 
 
-            val sampleCategory = arrayOf(
-                Category(
+            val sampleCategoryEntities = arrayOf(
+                CategoryEntity(
                     categoryId = null, // اجازه دهید Room شناسه را ایجاد کند
                     name = "ریشه اصلی",
                     parentCategoryId = -1,
@@ -142,7 +133,7 @@ class CompoundEffectApplication : Application() {
                     color = Color(0xFF000000).colorToString(),
                     description = "Root category"
                 ),
-                Category(
+                CategoryEntity(
                     categoryId = null,
                     name = "روتینها",
                     parentCategoryId = 1,
@@ -189,11 +180,12 @@ class CompoundEffectApplication : Application() {
 //                ),
             )
 
-            GlobalScope.launch {
-                database.categoryDao().insertCategory(*sampleCategory)
+            applicationScope.launch {
+                database.categoryDao().insertCategory(*sampleCategoryEntities)
                 database.eventDao().insertEvent(*sampleEvents)
                 database.systemDao().insertAppSystemInfo(appSystemInfo)
             }
+
             // ذخیره وضعیت اولین اجرا
             sharedPreferences.edit().putBoolean("is_first_run", false).apply()
         }

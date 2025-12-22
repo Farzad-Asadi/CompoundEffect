@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+    alias(libs.plugins.hilt)
     alias(libs.plugins.com.google.devtools.ksp)
 }
 
@@ -84,13 +85,18 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
-//    ksp(libs.androidx.room.room.compiler)
-//    implementation("androidx.room:room-ktx:${rootProject.extra["room_version"]}")
-//    implementation("androidx.room:room-runtime:${rootProject.extra["room_version"]}")
-//    ksp("androidx.room:room-compiler:${rootProject.extra["room_version"]}")
+
+
 
     //Icons
     implementation("androidx.compose.material:material-icons-extended")
+
+
+    //hilt
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.navigation.compose)
+
 
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 

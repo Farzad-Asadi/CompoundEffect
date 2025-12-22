@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Relation
 
 @Entity(tableName = "category")
-data class Category(
+data class CategoryEntity(
 
     @PrimaryKey(autoGenerate = true)
     val categoryId : Int?=null,
@@ -24,11 +24,11 @@ data class Category(
 )
 
 data class CategoryWithChildren(
-    @Embedded val category: Category,
+    @Embedded val categoryEntity: CategoryEntity,
     @Relation(
         parentColumn = "categoryId",
         entityColumn = "parentCategoryId"
-    )val categoryChildren: List<Category>?
+    )val categoryEntityChildren: List<CategoryEntity>?
 )
 
 

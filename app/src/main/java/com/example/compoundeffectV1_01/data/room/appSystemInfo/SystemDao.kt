@@ -8,7 +8,7 @@ import androidx.room.Query
 
 
 @Dao
-interface AppSystemInfoDao {
+interface SystemDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAppSystemInfo(appSystemInfo: AppSystemInfo)
 

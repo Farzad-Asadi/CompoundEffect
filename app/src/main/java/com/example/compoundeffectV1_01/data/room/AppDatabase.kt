@@ -6,22 +6,22 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.example.compoundeffectV1_01.data.room.appSystemInfo.AppSystemInfo
-import com.example.compoundeffectV1_01.data.room.appSystemInfo.AppSystemInfoDao
-import com.example.compoundeffectV1_01.data.room.category.Category
+import com.example.compoundeffectV1_01.data.room.appSystemInfo.SystemDao
+import com.example.compoundeffectV1_01.data.room.category.CategoryEntity
 import com.example.compoundeffectV1_01.data.room.category.CategoryDao
 import com.example.compoundeffectV1_01.data.room.event.Event
 import com.example.compoundeffectV1_01.data.room.event.EventDao
 import com.example.compoundeffectV1_01.data.room.typeConvertor.TypeConverter
 
 
-@Database(entities = [Category::class,Event::class, AppSystemInfo::class], version = 1, exportSchema = false)
+@Database(entities = [CategoryEntity::class,Event::class, AppSystemInfo::class], version = 1, exportSchema = false)
 @TypeConverters(TypeConverter::class)
 abstract class AppDatabase : RoomDatabase() {
 
 
     abstract fun categoryDao(): CategoryDao
     abstract fun eventDao(): EventDao
-    abstract fun systemDao(): AppSystemInfoDao
+    abstract fun systemDao(): SystemDao
 
 
 
