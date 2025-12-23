@@ -185,8 +185,56 @@ class CategoryViewModel2 @Inject constructor(
         }
     }
 
+    fun applyDragResult(
+        draggedId: Int,
+        oldParentId: Int?,
+        newParentId: Int?,
+        currentList: List<CategoryRenderItem>
+    ) {
+        viewModelScope.launch {
+            val dragged = uiState.value.categories.firstOrNull { it.categoryId == draggedId } ?: return@launch
 
-    fun flattenCategoryTreeWithLevelsAndVisibility(
+            val finalNewParent = newParentId ?: dragged.parentCategoryId
+
+            // parent جدید باید سطحش < 4 باشد
+            val parentLevel = uiState.value.levelById[finalNewParent ?: return@launch] ?: 1
+            if (parentLevel >= 4) return@launch
+
+            // آپدیت parent (اگر تغییر کرده)
+            if (finalNewParent != dragged.parentCategoryId) {
+                categoryRepository.updateCategory(dragged.copy(parentCategoryId = finalNewParent))
+            }
+
+            suspend fun reorderFor(parentId: Int?) {
+                val orderedIds = currentList
+                    .asSequence()
+                    .filter { it.isVisible }
+                    .filter { item ->
+                        val id = item.category.categoryId ?: return@filter false
+                        val p = if (id == draggedId) finalNewParent else item.category.parentCategoryId
+                        p == parentId
+                    }
+                    .mapNotNull { it.category.categoryId }
+                    .toList()
+
+                val currentEntities = uiState.value.categories.filter { it.parentCategoryId == parentId }
+                val byId = currentEntities.associateBy { it.categoryId }
+
+                orderedIds.forEachIndexed { index, id ->
+                    val e = byId[id] ?: return@forEachIndexed
+                    categoryRepository.updateCategory(e.copy(siblingIndex = index))
+                }
+            }
+
+
+            reorderFor(oldParentId)
+            reorderFor(finalNewParent)
+        }
+    }
+
+
+
+    private fun flattenCategoryTreeWithLevelsAndVisibility(
         all: List<CategoryEntity>,
         collapsedIds: Set<Int>,
         rootParentId: Int = -1,
@@ -205,7 +253,8 @@ class CategoryViewModel2 @Inject constructor(
 
             for (child in children) {
                 val id = child.categoryId
-                val hasChildren = (byParent[id] ?: emptyList()).isNotEmpty()
+                val hasChildrenRaw = (byParent[id] ?: emptyList()).isNotEmpty()
+                val hasChildren = (level < maxDepth) && hasChildrenRaw
                 val isExpanded = id != null && !collapsedIds.contains(id)
                 val selfCollapsed = id != null && collapsedIds.contains(id)
 
