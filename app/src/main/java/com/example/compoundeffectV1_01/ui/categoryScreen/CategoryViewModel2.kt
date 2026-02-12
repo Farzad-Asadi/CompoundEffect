@@ -52,9 +52,19 @@ class CategoryViewModel2 @Inject constructor(
     val draft = _draft.asStateFlow()
 
 
+    private val _createResult = MutableStateFlow<CreateResult?>(null)
+    val createResult = _createResult.asStateFlow()
 
-
-
+    val parentPickerItems: StateFlow<FlattenResult> =
+        categoryRepository.observeAll()
+            .map { categories ->
+                flattenForPickerAllVisible(categories)
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = FlattenResult(emptyList(), emptyMap())
+            )
 
 
 
@@ -91,23 +101,28 @@ class CategoryViewModel2 @Inject constructor(
         // set draft parent
     }
 
+
+
+
+
+
     fun setDraftName(value: String) {
         _draft.update { it.copy(name = value) }
     }
-
-    fun trySetDraftParent(parentId: Int): Boolean {
-        val parentLevel = uiState.value.levelById[parentId] ?: 1
-        if (parentLevel >= 4) return false
-        _draft.update { it.copy(parentId = parentId) }
-        return true
+    fun setDraftIconName(value: String) {
+        _draft.update { it.copy(iconName = value) }
     }
-
-    fun createCategoryFromDraft(): Boolean {
+    fun setDraftColor(value: String) {
+        _draft.update { it.copy(color = value) }
+    }
+    fun createCategoryFromDraft() {
         val d = _draft.value
-        if (d.name.isBlank()) return false
+        if (d.name.isBlank()) {
+            _createResult.value = CreateResult.Error("نام گروه را وارد کن")
+            return
+        }
 
         viewModelScope.launch {
-            // siblingIndex = آخرین فرزندهای همین parent
             val current = uiState.value.categories
             val nextSiblingIndex = current.count { it.parentCategoryId == d.parentId }
 
@@ -121,14 +136,35 @@ class CategoryViewModel2 @Inject constructor(
                     siblingIndex = nextSiblingIndex
                 )
             )
+
             resetDraft()
+            _createResult.value = CreateResult.Success
         }
+    }
+    fun resetDraft() {
+        _draft.value = CategoryDraft2()
+        _createResult.value = null
+    }
+
+
+
+
+
+
+
+
+
+
+    fun trySetDraftParent(parentId: Int): Boolean {
+        val parentLevel = uiState.value.levelById[parentId] ?: 1
+        if (parentLevel >= 4) return false
+        _draft.update { it.copy(parentId = parentId) }
         return true
     }
 
-    fun resetDraft() {
-        _draft.value = CategoryDraft2()
-    }
+
+
+
 
     fun reorderWithinSameParent(parentId: Int?, orderedIds: List<Int>) {
         viewModelScope.launch {
@@ -221,10 +257,18 @@ class CategoryViewModel2 @Inject constructor(
                 val byId = currentEntities.associateBy { it.categoryId }
 
                 orderedIds.forEachIndexed { index, id ->
-                    val e = byId[id] ?: return@forEachIndexed
-                    categoryRepository.updateCategory(e.copy(siblingIndex = index))
+                    val entity =
+                        if (id == draggedId) {
+                            // dragged ممکنه هنوز تو uiState با parent قبلی باشه
+                            dragged.copy(parentCategoryId = finalNewParent)
+                        } else {
+                            byId[id] ?: return@forEachIndexed
+                        }
+
+                    categoryRepository.updateCategory(entity.copy(siblingIndex = index))
                 }
             }
+
 
 
             reorderFor(oldParentId)
@@ -245,8 +289,11 @@ class CategoryViewModel2 @Inject constructor(
         val items = mutableListOf<CategoryRenderItem>()
         val levelById = mutableMapOf<Int, Int>()
 
-        fun dfs(parentId: Int?, level: Int, ancestorCollapsed: Boolean) {
-            if (level > maxDepth) return
+        fun dfs(parentId: Int?, realDepth: Int, ancestorCollapsed: Boolean) {
+            // ✅ توقف فقط برای امنیت (در صورت داده خراب/سیکل)
+            if (realDepth > 50) return
+
+            val renderLevel = realDepth.coerceAtMost(maxDepth)
 
             val children = (byParent[parentId] ?: emptyList())
                 .sortedBy { it.siblingIndex }
@@ -254,30 +301,80 @@ class CategoryViewModel2 @Inject constructor(
             for (child in children) {
                 val id = child.categoryId
                 val hasChildrenRaw = (byParent[id] ?: emptyList()).isNotEmpty()
-                val hasChildren = (level < maxDepth) && hasChildrenRaw
-                val isExpanded = id != null && !collapsedIds.contains(id)
-                val selfCollapsed = id != null && collapsedIds.contains(id)
 
-                if (id != null) levelById[id] = level
+                // ✅ دکمه expand فقط تا سطح ۴ (مثل قبل)
+                val hasChildren = (renderLevel < maxDepth) && hasChildrenRaw
+
+                val selfCollapsed = id != null && collapsedIds.contains(id)
+                val isExpanded = id != null && !selfCollapsed
+
+                if (id != null) levelById[id] = renderLevel
 
                 val visible = !ancestorCollapsed
 
                 items.add(
                     CategoryRenderItem(
                         category = child,
-                        level = level,
+                        level = renderLevel,         // ✅ level نمایشی
                         hasChildren = hasChildren,
                         isExpanded = isExpanded,
                         isVisible = visible
                     )
                 )
 
-                // اگر خود این نود collapse شده، بچه‌هاش invisible می‌شن (ancestorCollapsed=true)
-                dfs(child.categoryId, level + 1, ancestorCollapsed = ancestorCollapsed || selfCollapsed)
+                // ✅ ادامه بده، حتی اگر depth واقعی از ۴ رد شد
+                dfs(
+                    parentId = id,
+                    realDepth = realDepth + 1,
+                    ancestorCollapsed = ancestorCollapsed || selfCollapsed
+                )
             }
         }
 
-        dfs(rootParentId, level = 1, ancestorCollapsed = false)
+        dfs(rootParentId, realDepth = 1, ancestorCollapsed = false)
+        return FlattenResult(items, levelById)
+    }
+
+    private fun flattenForPickerAllVisible(
+        all: List<CategoryEntity>,
+        rootParentId: Int = -1,
+        maxDepth: Int = 4
+    ): FlattenResult {
+
+        val byParent = all.groupBy { it.parentCategoryId }
+        val items = mutableListOf<CategoryRenderItem>()
+        val levelById = mutableMapOf<Int, Int>()
+
+        fun dfs(parentId: Int?, realDepth: Int) {
+            if (realDepth > 50) return // گارد امنیتی
+
+            val renderLevel = realDepth.coerceAtMost(maxDepth)
+
+            val children = (byParent[parentId] ?: emptyList())
+                .sortedBy { it.siblingIndex }
+
+            for (child in children) {
+                val id = child.categoryId
+                val hasChildrenRaw = (byParent[id] ?: emptyList()).isNotEmpty()
+                val hasChildren = (renderLevel < maxDepth) && hasChildrenRaw
+
+                if (id != null) levelById[id] = renderLevel
+
+                items.add(
+                    CategoryRenderItem(
+                        category = child,
+                        level = renderLevel,
+                        hasChildren = hasChildren,
+                        isExpanded = true,  // در picker مهم نیست
+                        isVisible = true    // ✅ همیشه visible
+                    )
+                )
+
+                dfs(id, realDepth + 1)
+            }
+        }
+
+        dfs(rootParentId, realDepth = 1)
         return FlattenResult(items, levelById)
     }
 
@@ -286,6 +383,10 @@ class CategoryViewModel2 @Inject constructor(
 
 
 
+    sealed class CreateResult {
+        data object Success : CreateResult()
+        data class Error(val message: String) : CreateResult()
+    }
 
 
 
@@ -324,8 +425,11 @@ data class FlattenResult(
 
 data class CategoryDraft2(
     val name: String = "",
-    val parentId: Int = 1,
+    val parentId: Int = -1,
     val iconName: String = "QuestionMark",
-    val color: String = "#000000",
+    val color: String =  "#2196F3",  // آبی متریال
     val description: String = ""
 )
+
+
+

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.AutoDelete
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.BakeryDining
 import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Bathtub
 import androidx.compose.material.icons.filled.BeachAccess
@@ -42,12 +43,14 @@ import androidx.compose.material.icons.filled.Boy
 import androidx.compose.material.icons.filled.Brightness5
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CandlestickChart
 import androidx.compose.material.icons.filled.Cases
 import androidx.compose.material.icons.filled.Castle
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Chair
 import androidx.compose.material.icons.filled.Checkroom
@@ -60,26 +63,165 @@ import androidx.compose.material.icons.filled.Deck
 import androidx.compose.material.icons.filled.Desk
 import androidx.compose.material.icons.filled.Dining
 import androidx.compose.material.icons.filled.EnergySavingsLeaf
+import androidx.compose.material.icons.filled.Engineering
 import androidx.compose.material.icons.filled.Fence
 import androidx.compose.material.icons.filled.FireExtinguisher
 import androidx.compose.material.icons.filled.Garage
 import androidx.compose.material.icons.filled.Grass
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Hardware
+import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.House
 import androidx.compose.material.icons.filled.Kitchen
+import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.LocalMall
+import androidx.compose.material.icons.filled.LunchDining
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.ModeNight
 import androidx.compose.material.icons.filled.OutdoorGrill
 import androidx.compose.material.icons.filled.Outlet
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QuestionMark
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Shower
 import androidx.compose.material.icons.filled.Sports
+import androidx.compose.material.icons.filled.SportsBasketball
+import androidx.compose.material.icons.filled.SportsSoccer
+import androidx.compose.material.icons.filled.SportsTennis
+import androidx.compose.material.icons.filled.SportsVolleyball
 import androidx.compose.material.icons.filled.TableBar
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Vaccines
 import androidx.compose.material.icons.filled.Villa
+import androidx.compose.material.icons.filled.Warehouse
 import androidx.compose.material.icons.filled.Window
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+
+
+data class IconOption(val key: String, val icon: ImageVector)
+data class IconSection(val title: String, val options: List<IconOption>)
+
+
+fun buildIconSections(): List<IconSection> = listOf(
+    IconSection(
+        title = "Buildings & furniture",
+        options = listOf(
+            IconOption("Home", Icons.Filled.Home),
+            IconOption("Apartment", Icons.Filled.Apartment),
+            IconOption("Business", Icons.Filled.Business),
+            IconOption("Warehouse", Icons.Filled.Warehouse),
+        )
+    ),
+    IconSection(
+        title = "People",
+        options = listOf(
+            IconOption("Person", Icons.Filled.Person),
+            IconOption("School", Icons.Filled.School),
+            IconOption("Engineering", Icons.Filled.Engineering),
+            IconOption("Groups", Icons.Filled.Groups),
+        )
+    ),
+    IconSection(
+        title = "Food & cooking",
+        options = listOf(
+            IconOption("Restaurant", Icons.Filled.Restaurant),
+            IconOption("LocalCafe", Icons.Filled.LocalCafe),
+            IconOption("LunchDining", Icons.Filled.LunchDining),
+            IconOption("BakeryDining", Icons.Filled.BakeryDining),
+        )
+    ),
+    IconSection(
+        title = "Shopping & clothes",
+        options = listOf(
+            IconOption("ShoppingCart", Icons.Filled.ShoppingCart),
+            IconOption("Checkroom", Icons.Filled.Checkroom),
+            IconOption("LocalMall", Icons.Filled.LocalMall),
+            IconOption("Sell", Icons.Filled.Sell),
+        )
+    ),
+    IconSection(
+        title = "Sport",
+        options = listOf(
+            IconOption("SportsSoccer", Icons.Filled.SportsSoccer),
+            IconOption("SportsBasketball", Icons.Filled.SportsBasketball),
+            IconOption("SportsTennis", Icons.Filled.SportsTennis),
+            IconOption("SportsVolleyball", Icons.Filled.SportsVolleyball),
+        )
+    ),
+    IconSection(
+        title = "Medicine & health",
+        options = listOf(
+            IconOption("MedicalServices", Icons.Filled.MedicalServices),
+            IconOption("LocalHospital", Icons.Filled.LocalHospital),
+            IconOption("Vaccines", Icons.Filled.Vaccines),
+            IconOption("HealthAndSafety", Icons.Filled.HealthAndSafety),
+        )
+    ),
+)
+
+fun iconFromKey(key: String): ImageVector {
+    return when (key) {
+        "Home" -> Icons.Filled.Home
+        "Apartment" -> Icons.Filled.Apartment
+        "Business" -> Icons.Filled.Business
+        "Warehouse" -> Icons.Filled.Warehouse
+
+        "Person" -> Icons.Filled.Person
+        "School" -> Icons.Filled.School
+        "Engineering" -> Icons.Filled.Engineering
+        "Groups" -> Icons.Filled.Groups
+
+        "Restaurant" -> Icons.Filled.Restaurant
+        "LocalCafe" -> Icons.Filled.LocalCafe
+        "LunchDining" -> Icons.Filled.LunchDining
+        "BakeryDining" -> Icons.Filled.BakeryDining
+
+        "ShoppingCart" -> Icons.Filled.ShoppingCart
+        "Checkroom" -> Icons.Filled.Checkroom
+        "LocalMall" -> Icons.Filled.LocalMall
+        "Sell" -> Icons.Filled.Sell
+
+        "SportsSoccer" -> Icons.Filled.SportsSoccer
+        "SportsBasketball" -> Icons.Filled.SportsBasketball
+        "SportsTennis" -> Icons.Filled.SportsTennis
+        "SportsVolleyball" -> Icons.Filled.SportsVolleyball
+
+        "MedicalServices" -> Icons.Filled.MedicalServices
+        "LocalHospital" -> Icons.Filled.LocalHospital
+        "Vaccines" -> Icons.Filled.Vaccines
+        "HealthAndSafety" -> Icons.Filled.HealthAndSafety
+
+        else -> Icons.Filled.Category
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 val topic_iconMap= mapOf(
     "ForAppOnly" to mapOf(
