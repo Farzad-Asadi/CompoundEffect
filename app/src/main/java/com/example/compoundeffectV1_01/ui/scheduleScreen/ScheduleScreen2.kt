@@ -1,5 +1,6 @@
 package com.example.compoundeffectV1_01.ui.scheduleScreen
 
+import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -59,6 +60,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -84,7 +86,6 @@ fun ScheduleScreen2(
     val timelineItems = remember(allItems) { allItems.filter { !it.inPallet } }
     val palletItems   = remember(allItems) { allItems.filter { it.inPallet } }
 
-
     // ✅ تنظیمات تایم‌لاین
     val numDays = 5
     val startDate by rememberSaveable { mutableStateOf(LocalDate.now()) }
@@ -101,11 +102,7 @@ fun ScheduleScreen2(
     val didAutoScroll = rememberSaveable { mutableStateOf(false) }
 
     var gridViewportHeightPx by remember { mutableFloatStateOf(0f) }
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-
-
-    val scrollStepPx = with(density) { 18.dp.toPx() }     // سرعت اسکرول
 
     var autoScrollDir by remember { mutableIntStateOf(0) } // -1 بالا، +1 پایین، 0 هیچ
     var autoScrollIntensity by remember { mutableFloatStateOf(0f) } // 0..1 سرعت نسبی
@@ -113,11 +110,8 @@ fun ScheduleScreen2(
     val edgeThresholdPx = with(density) { 72.dp.toPx() }  // ناحیه حساس
     val baseScrollStepPx = with(density) { 22.dp.toPx() } // سرعت پایه
 
-
-
     var draggingFromPallet by remember { mutableStateOf<ScheduleScreenItem?>(null) }
 
-    var draggingSchedule by remember { mutableStateOf<Task?>(null) }
     var dragX by remember { mutableFloatStateOf(0f) }
     var dragY by remember { mutableFloatStateOf(0f) }
 
@@ -127,15 +121,12 @@ fun ScheduleScreen2(
 
     var overlayLayerOriginInRoot by remember { mutableStateOf(Offset.Zero) }
 
-
     val palletContentWidth = 160.dp
     val palletOverlayWidth = 18.dp + if (palletExpanded) palletContentWidth else 0.dp
 
     val pendingMove = remember { mutableStateMapOf<Int, PendingMove>() } // key = scheduleId
 
-
     var selectedScheduleId by rememberSaveable { mutableStateOf<Int?>(null) }
-
 
     val dayWidthPx = with(density) { dayWidthDp.toPx() }
     val hourHeightPx = with(density) { hourHeightDp.toPx() }
@@ -156,12 +147,60 @@ fun ScheduleScreen2(
         }
     }
 
-
-
-
-
-
     var isAutoScrollingActive by remember { mutableStateOf(false) }
+
+    val updateAutoScroll2: (startMin: Int, endMin: Int, mode: AutoScrollMode) -> Unit =
+        let@{ startMin, endMin, mode ->
+
+            if (gridViewportHeightPx <= 0f) {
+                autoScrollDir = 0
+                autoScrollIntensity = 0f
+                return@let
+            }
+
+            val viewTopPx = vScroll.value.toFloat()
+            val viewBottomPx = viewTopPx + gridViewportHeightPx
+
+            fun edgeIntensity(edgeMin: Int): Pair<Int, Float> {
+                val yPx = hourHeightPx * (edgeMin / 60f)
+                val distTop = yPx - viewTopPx
+                val distBottom = viewBottomPx - yPx
+
+                val topHit = distTop < edgeThresholdPx && vScroll.value > 0
+                val botHit = distBottom < edgeThresholdPx && vScroll.value < vScroll.maxValue
+
+                val topI = if (topHit) ((edgeThresholdPx - distTop) / edgeThresholdPx).coerceIn(0f, 1f) else 0f
+                val botI = if (botHit) ((edgeThresholdPx - distBottom) / edgeThresholdPx).coerceIn(0f, 1f) else 0f
+
+                return if (botI > topI) +1 to botI else -1 to topI
+            }
+
+            when (mode) {
+                AutoScrollMode.RESIZE_START -> {
+                    val (dir, inten) = edgeIntensity(startMin) // ✅ فقط لبه بالا
+                    autoScrollDir = if (inten == 0f) 0 else dir
+                    autoScrollIntensity = inten
+                }
+
+                AutoScrollMode.RESIZE_END -> {
+                    val (dir, inten) = edgeIntensity(endMin)   // ✅ فقط لبه پایین
+                    autoScrollDir = if (inten == 0f) 0 else dir
+                    autoScrollIntensity = inten
+                }
+
+                AutoScrollMode.MOVE -> {
+                    // ✅ هر دو لبه را می‌سنجیم و هرکدام شدت بیشتری دارد انتخاب می‌شود
+                    val (dir1, i1) = edgeIntensity(startMin)
+                    val (dir2, i2) = edgeIntensity(endMin)
+
+                    val (dir, inten) = if (i2 > i1) dir2 to i2 else dir1 to i1
+                    autoScrollDir = if (inten == 0f) 0 else dir
+                    autoScrollIntensity = inten
+                }
+            }
+        }
+
+
 
 
     LaunchedEffect(isAutoScrollingActive) {
@@ -174,22 +213,18 @@ fun ScheduleScreen2(
                 val prev = vScroll.value
                 val next = (prev + dir * step).toInt().coerceIn(0, vScroll.maxValue)
 
-                if (next == prev) {
-                    isAutoScrollingActive = false
+                if (next != prev) {
+                    vScroll.scrollTo(next)
+                } else {
+                    // ✅ hit edge -> pause, don't stop
                     autoScrollDir = 0
                     autoScrollIntensity = 0f
-                    break
                 }
-
-
-                vScroll.scrollTo(next)
             }
 
-            delay(16) // حدود 60fps
+            delay(16)
         }
     }
-
-
 
     LaunchedEffect(timelineItems) {
         timelineItems.forEach { ti ->
@@ -204,51 +239,6 @@ fun ScheduleScreen2(
             }
         }
     }
-
-
-    val updateAutoScroll: (startMin: Int, endMin: Int) -> Unit =
-        update@{ startMin, endMin ->
-
-            if (gridViewportHeightPx <= 0f) {
-                autoScrollDir = 0
-                autoScrollIntensity = 0f
-                return@update
-            }
-
-            val viewTopPx = vScroll.value.toFloat()
-            val viewBottomPx = viewTopPx + gridViewportHeightPx
-
-            val itemTopPx = hourHeightPx * (startMin / 60f)
-            val itemBottomPx = hourHeightPx * (endMin / 60f)
-
-            // فاصله آیتم تا لبه‌های ویو
-            val distToTop = itemTopPx - viewTopPx
-            val distToBottom = viewBottomPx - itemBottomPx
-
-            when {
-                distToTop < edgeThresholdPx && vScroll.value > 0 -> {
-                    autoScrollDir = -1
-                    autoScrollIntensity =
-                        ((edgeThresholdPx - distToTop) / edgeThresholdPx).coerceIn(0f, 1f)
-                }
-
-                distToBottom < edgeThresholdPx && vScroll.value < vScroll.maxValue -> {
-                    autoScrollDir = +1
-                    autoScrollIntensity =
-                        ((edgeThresholdPx - distToBottom) / edgeThresholdPx).coerceIn(0f, 1f)
-                }
-
-                else -> {
-                    autoScrollDir = 0
-                    autoScrollIntensity = 0f
-                }
-            }
-        }
-
-
-
-
-
 
     LaunchedEffect(vScroll.maxValue, hourHeightDp, dayWidthDp, startDate) {
         // صبر کن تا ScrollState اندازه‌ها رو بگیره
@@ -356,12 +346,14 @@ fun ScheduleScreen2(
                         modifier = Modifier
                             .weight(1f)
                             .padding(end = palletOverlayWidth)
-                            .verticalScroll(vScroll)
-                            .horizontalScroll(hScroll)
                             .onGloballyPositioned { coords ->
                                 gridOriginInWindow = coords.positionInRoot()
-                                gridViewportHeightPx = coords.size.height.toFloat() // ✅ ارتفاع visible
                             }
+                            .onSizeChanged { size ->
+                                gridViewportHeightPx = size.height.toFloat()
+                            }
+                            .verticalScroll(vScroll)
+                            .horizontalScroll(hScroll)
                     ) {
                         val totalHeight = hourHeightDp * 24
                         val totalWidth = dayWidthDp * numDays
@@ -439,8 +431,16 @@ fun ScheduleScreen2(
                                     numDays = numDays,
                                     selected = (selectedScheduleId == displayItem.scheduleId),
                                     onToggleSelected = {
-                                        selectedScheduleId =
-                                            if (selectedScheduleId == displayItem.scheduleId) null else displayItem.scheduleId
+                                        val newSelection =
+                                            if (selectedScheduleId == displayItem.scheduleId) null
+                                            else displayItem.scheduleId
+
+                                        selectedScheduleId = newSelection
+
+                                        // ✅ اگر آیتم انتخاب شد، پالت بسته شود
+                                        if (newSelection != null) {
+                                            palletExpanded = false
+                                        }
                                     },
                                     onMoveCommit = { scheduleId, date, s, e ->
                                         pendingMove[scheduleId] = PendingMove(date, s, e)
@@ -456,7 +456,7 @@ fun ScheduleScreen2(
                                         viewModel.moveScheduleFromTimeLineToPallet(scheduleId)
                                         selectedScheduleId = null
                                     },
-                                    onAutoScroll = updateAutoScroll,
+                                    onAutoScroll = updateAutoScroll2,
                                     onAutoScrollStart = { isAutoScrollingActive = true },
                                     onAutoScrollStop = {
                                         isAutoScrollingActive = false
@@ -505,8 +505,12 @@ fun ScheduleScreen2(
                     val localX = dragX - gridOriginInWindow.x
                     val localY = dragY - gridOriginInWindow.y
 
-                    val dayIndex = (localX / dayWidthPx).toInt()
-                    val minuteOfDay = ((localY / hourHeightPx) * 60f).toInt()
+                    // ✅ تبدیل به مختصات "محتوا" با در نظر گرفتن اسکرول
+                    val contentX = localX + hScroll.value
+                    val contentY = localY + vScroll.value
+
+                    val dayIndex = (contentX / dayWidthPx).toInt()
+                    val minuteOfDay = ((contentY / hourHeightPx) * 60f).toInt()
 
 
                     if (dayIndex in 0 until numDays && minuteOfDay in 0 until 24 * 60) {
@@ -627,12 +631,13 @@ private fun TimelineItemBox(
     onResizeEndCommit: (scheduleId: Int, newEndMin: Int) -> Unit,
     onResizeStartCommit: (scheduleId: Int, newStartMin: Int) -> Unit,
     onSendToPallet: (scheduleId: Int, taskId: Int) -> Unit,
-    onAutoScroll: (startMin: Int, endMin: Int) -> Unit,
+    onAutoScroll: (startMin: Int, endMin: Int, mode: AutoScrollMode) -> Unit,
     onAutoScrollStart: () -> Unit,
     onAutoScrollStop: () -> Unit,
     vScrollValueProvider: () -> Int,
 
     ) {
+
     val density = LocalDensity.current
     val dayWpx = with(density) { dayWidthDp.toPx() }
     val hourHpx = with(density) { hourHeightDp.toPx() }
@@ -847,7 +852,8 @@ private fun TimelineItemBox(
                                 val desiredEnd = desiredStart + dur0
                                 val r = clampRange(desiredStart, desiredEnd)
 
-                                onAutoScroll(r.start, r.end)
+                                onAutoScroll(r.start, r.end, AutoScrollMode.MOVE)
+
                             },
                             onDragEnd = {
                                 // محاسبه نهایی با dragDx/dragDy فعلی
@@ -921,10 +927,10 @@ private fun TimelineItemBox(
                                 val topDeltaNow = ((effectiveTopDy / hourHpx) * 60f).roundToInt()
                                 val raw = (startMin0 + topDeltaNow)
                                     .coerceIn(DAY_MIN, (endMin0 - MIN_GAP_MIN).coerceAtLeast(DAY_MIN))
-                                val desired = snap(raw, 5)
+                                val desired = snap(raw, 15)
                                 val clamped = clampRange(desired, endMin0)
 
-                                onAutoScroll(clamped.start, endMin0)
+                                onAutoScroll(clamped.start, endMin0, AutoScrollMode.RESIZE_START)
 
                             },
                             onDragEnd = {
@@ -936,7 +942,7 @@ private fun TimelineItemBox(
                                 val raw = (startMin0 + topDeltaMin2)
                                     .coerceIn(DAY_MIN, (endMin0 - MIN_GAP_MIN).coerceAtLeast(DAY_MIN))
 
-                                val desired = snap(raw, 5) // یا 15 اگر می‌خوای
+                                val desired = snap(raw, 15) // یا 15 اگر می‌خوای
                                 val clamped = clampRange(desired, endMin0)
 
                                 onResizeStartCommit(item.scheduleId, clamped.start)
@@ -1023,13 +1029,13 @@ private fun TimelineItemBox(
                                 bottomDy += dragAmount
 
                                 val effectiveBottomDy = bottomDy
-                                val bottomDeltaNow = ((effectiveBottomDy / hourHpx) * 60f).roundToInt()
+                                val bottomDeltaNow = ((effectiveBottomDy / hourHpx) * 60f).toInt()
                                 val raw = (endMin0 + bottomDeltaNow)
                                     .coerceIn((startMin0 + MIN_GAP_MIN).coerceAtMost(DAY_MAX), DAY_MAX)
-                                val desired = snap(raw, 5)
+                                val desired = snap(raw, 15)
                                 val clamped = clampRange(startMin0, desired)
 
-                                onAutoScroll(startMin0, clamped.end)
+                                onAutoScroll(startMin0, clamped.end, AutoScrollMode.RESIZE_END)
 
                             },
                             onDragEnd = {
@@ -1040,7 +1046,7 @@ private fun TimelineItemBox(
                                 val raw = (endMin0 + bottomDeltaMin2)
                                     .coerceIn((startMin0 + MIN_GAP_MIN).coerceAtMost(DAY_MAX), DAY_MAX)
 
-                                val desired = snap(raw, 5) // یا 15
+                                val desired = snap(raw, 15) // یا 15
                                 val clamped = clampRange(startMin0, desired)
 
                                 onResizeEndCommit(item.scheduleId, clamped.end)
@@ -1129,7 +1135,7 @@ private fun RightPallet(
         // ✅ محتوا را هنگام Drag هم نگه دار
         if (keepContent) {
             // ظاهر را اگر می‌خواهی “بسته” نشان بدهی، عرض را کم کن
-            val contentWidth = 200.dp
+            val contentWidth = 160.dp
             val visibleAlpha = if (expanded && !isDraggingFromPallet) 1f else 0f
 
             Box(
@@ -1257,6 +1263,9 @@ private const val MIN_GAP_MIN = 5
 private const val DAY_MIN = 0
 private const val DAY_MAX = 24 * 60
 
+
+private enum class AutoScrollMode { MOVE, RESIZE_START, RESIZE_END }
+
 private data class MinRange(val start: Int, val end: Int)
 
 private fun clampRange(start: Int, end: Int): MinRange {
@@ -1289,4 +1298,9 @@ private fun minuteToHHmm(minute: Int): String {
     val h = m / 60
     val mm = m % 60
     return "%02d:%02d".format(h, mm)
+}
+
+fun dateAtMinute(date: LocalDate, minute: Int): LocalDateTime {
+    val m = minute.coerceIn(0, 24 * 60)
+    return date.atStartOfDay().plusMinutes(m.toLong())
 }

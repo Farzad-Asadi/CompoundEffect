@@ -36,8 +36,8 @@ class ScheduleScreenViewModel @Inject constructor(
                     val e = r.s_endMinuteOfDay ?: return@mapNotNull null
                     if (e <= s) return@mapNotNull null
 
-                    val start = LocalDateTime.of(date, java.time.LocalTime.of(s / 60, s % 60))
-                    val end = LocalDateTime.of(date, java.time.LocalTime.of(e / 60, e % 60))
+                    val start = date.atStartOfDay().plusMinutes(s.toLong())
+                    val end   = date.atStartOfDay().plusMinutes(e.toLong())
 
                     ScheduleScreenItem(
                         scheduleId = r.s_id,
