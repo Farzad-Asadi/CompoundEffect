@@ -46,6 +46,6 @@ interface TaskRepository {
 
     suspend fun applyTaskReorderAndHierarchy(updates: List<TaskReorderUpdate>)
 
-
+    suspend fun setCompletedForIds(ids: List<Int>, done: Boolean)
 
 }

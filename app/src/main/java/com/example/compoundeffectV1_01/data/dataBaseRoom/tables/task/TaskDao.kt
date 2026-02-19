@@ -96,5 +96,8 @@ interface TaskDao {
         }
     }
 
+    @Query("UPDATE Task SET isCompleted = :done WHERE id IN (:ids)")
+    suspend fun setCompletedForIds(ids: List<Int>, done: Boolean)
+
 
 }

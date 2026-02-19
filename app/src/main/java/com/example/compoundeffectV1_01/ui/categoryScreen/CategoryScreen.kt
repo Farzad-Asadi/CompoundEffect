@@ -563,8 +563,8 @@ fun CategoryScreen(
             scheduledCount = scheduledCount,
             sheetMode = sheetMode,
             onChangeMode = { sheetMode = it },
-            toggleTaskCompleted = { taskId: Int, done: Boolean ->
-                viewModel.toggleTaskCompleted(taskId, done)
+            toggleTaskCompleted = { taskId ,_->
+                viewModel.toggleTaskCompletedCascade(taskId)
             },
             deleteTask = { taskId: Int ->
                 viewModel.deleteTask(taskId)
@@ -953,6 +953,7 @@ private fun TaskRow(
     computedLevel: Int,
     onToggleExpand: (Int) -> Unit,
     onClickTask: (Int) -> Unit,
+    onToggleDone: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val id = item.task.id
@@ -972,7 +973,9 @@ private fun TaskRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
 
-        // ✅ دایره done (ثابت)
+        Spacer(Modifier.width(6.dp))
+
+        // ✅ دایره done
         Box(
             modifier = Modifier
                 .size(22.dp)
@@ -983,10 +986,15 @@ private fun TaskRow(
                 )
                 .background(
                     color = if (item.task.isDone)
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                     else Color.Transparent,
                     shape = CircleShape
                 )
+                .clickable(
+                    // ✅ مهم: کلیک دایره به کلیک ردیف نره
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                ) { onToggleDone(id) }
         )
 
         Spacer(Modifier.width(12.dp))
@@ -1892,13 +1900,18 @@ private fun TasksModeContent2(
 
     fun tryOutdent(id: Int) {
         val current = allById[id] ?: return
+
         val currentParent = pendingParentById[id] ?: current.task.parentTaskId
-        if (currentParent == null) return
+        // اگر همین الان ریشه است، دیگه چیزی برای outdent نداریم
+        if (currentParent == null || currentParent == -1) return
 
         val parentItem = allById[currentParent] ?: return
         val newParent = parentItem.task.parentTaskId
-        pendingParentById[id] = newParent
+
+        // ✅ ریشه را با -1 نگه دار (نه null)
+        pendingParentById[id] = newParent ?: -1
     }
+
 
     val onHorizontalReparentHint: (Int, Float) -> Unit = reparent@{ id, deltaX ->
         val acc = (dragOffsetXById[id] ?: 0f) + deltaX
@@ -2043,8 +2056,11 @@ private fun TasksModeContent2(
                             computedLevel = effectiveLevel(id),
                             onToggleExpand = { toggleExpandForTask(it) },
                             onClickTask={onClickTask(it)},
+                            onToggleDone = { taskId ->
+                                val cur = listState.value.firstOrNull { it.task.id == taskId }?.task ?: return@TaskRow
+                                toggleTaskCompleted(taskId, !cur.isDone)  // ✅ معکوس
+                            },
                             modifier = rowDragModifier,
-//                            onOpenMenu = { id -> viewModel.setMenuCategoryId(id) }
                         )
 
                         HorizontalDivider(thickness = 0.5.dp) // ✅ خط باریک

@@ -63,4 +63,9 @@ class TaskRepositoryImpl @Inject constructor(
             updateTaskHierarchy(u.id, u.indentLevel, u.parentTaskId)
         }
     }
+
+    override suspend fun setCompletedForIds(ids: List<Int>, done: Boolean) {
+        if (ids.isEmpty()) return
+        taskDao.setCompletedForIds(ids, done)
+    }
 }

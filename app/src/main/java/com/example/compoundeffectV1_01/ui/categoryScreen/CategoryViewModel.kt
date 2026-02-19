@@ -297,6 +297,51 @@ class CategoryViewModel @Inject constructor(
             reorderFor(finalNewParent)
         }
     }
+    fun toggleTaskCompletedCascade(taskId: Int) {
+        viewModelScope.launch {
+            val task = withContext(Dispatchers.IO) { taskRepo.getTaskById(taskId) } ?: return@launch
+            val newDone = !task.isCompleted
+
+            if (!newDone) {
+                // ✅ برعکسش زنجیره‌ای نیست
+                withContext(Dispatchers.IO) {
+                    taskRepo.updateTask(task.copy(isCompleted = false))
+                }
+                return@launch
+            }
+
+            // ✅ done شدن: خودت + همه‌ی descendants
+            val categoryId = task.categoryId ?: return@launch
+            val allInCategory = withContext(Dispatchers.IO) { taskRepo.getTasksByCategoryOrdered(categoryId) }
+
+            val childrenByParent: Map<Int?, List<Int>> =
+                allInCategory
+                    .filter { it.id != null }
+                    .groupBy { it.parentTaskId }
+                    .mapValues { it.value.mapNotNull { t -> t.id } }
+
+            val idsToMarkDone = buildList {
+                add(taskId)
+
+                val stack = ArrayDeque<Int>()
+                stack.add(taskId)
+
+                while (stack.isNotEmpty()) {
+                    val cur = stack.removeLast()
+                    val children = childrenByParent[cur].orEmpty()
+                    for (childId in children) {
+                        add(childId)
+                        stack.add(childId)
+                    }
+                }
+            }.distinct()
+
+            withContext(Dispatchers.IO) {
+                taskRepo.setCompletedForIds(idsToMarkDone, true)
+            }
+        }
+    }
+
 
 
     //تسک ها
@@ -655,7 +700,12 @@ class CategoryViewModel @Inject constructor(
                 taskRepo.getTaskById(draggedId)
             } ?: return@launch
 
-            val finalNewParent: Int? = newParentId ?: dragged.parentTaskId
+            val finalNewParent: Int? = when (newParentId) {
+                -1 -> null                 // ✅ یعنی “ریشه”
+                null -> dragged.parentTaskId // یعنی “اصلاً تغییر parent ندادی”
+                else -> newParentId
+            }
+
 
             // 2) محاسبه indent مناسب بر اساس parent جدید
             val finalIndent: Int = if (finalNewParent == null) {
@@ -769,7 +819,6 @@ class CategoryViewModel @Inject constructor(
             taskRepo.updateTask(current.copy(isExtended = !willCollapse))
         }
     }
-
 
 
 
