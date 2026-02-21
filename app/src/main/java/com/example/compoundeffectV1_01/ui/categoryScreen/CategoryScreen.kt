@@ -1,6 +1,7 @@
 package com.example.compoundeffectV1_01.ui.categoryScreen
 
 import android.annotation.SuppressLint
+import android.os.SystemClock
 import android.util.Log
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -9,6 +10,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowRight
@@ -34,7 +38,9 @@ import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Description
@@ -49,11 +55,18 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveDone
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Task
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FabPosition
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -62,17 +75,26 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,24 +106,42 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.category.CategoryEntity
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.Task
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.RepeatUnit
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.ScheduleMode
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskSchedule
 import com.example.compoundeffectV1_01.utils.DimmedDialog
 import com.example.compoundeffectV1_01.utils.IconOption
 import com.example.compoundeffectV1_01.utils.buildColorOptions
 import com.example.compoundeffectV1_01.utils.buildIconSections
 import com.example.compoundeffectV1_01.utils.colorFromHex
+import com.example.compoundeffectV1_01.utils.durationMinutesSameDay
+import com.example.compoundeffectV1_01.utils.ensureAfter
 import com.example.compoundeffectV1_01.utils.iconFromKey
+import com.example.compoundeffectV1_01.utils.plusMinutesClamped
+import com.example.compoundeffectV1_01.utils.toFaText
+import com.example.compoundeffectV1_01.utils.toJalali
+import com.example.compoundeffectV1_01.utils.toLocalDate
+import com.gmail.hamedvakhide.compose_jalali_datepicker.JalaliDatePickerDialog
+import ir.huri.jcal.JalaliCalendar
 import org.burnoutcrew.reorderable.ReorderableItem
 import org.burnoutcrew.reorderable.detectReorderAfterLongPress
 import org.burnoutcrew.reorderable.rememberReorderableLazyListState
 import org.burnoutcrew.reorderable.reorderable
+import java.time.LocalDate
 import java.time.LocalTime
 
 @SuppressLint("SuspiciousIndentation")
@@ -121,7 +161,7 @@ fun CategoryScreen(
     val tasksWithSchedule by viewModel.tasksWithScheduleForMenu.collectAsState()
     val scheduledCount by viewModel.scheduledCountForMenu.collectAsState()
     val childLevelUi by viewModel.childLevelUi.collectAsState()
-
+    val schedules by viewModel.schedulesUiForTaskDialog.collectAsState()
 
 
     var showPickParent by rememberSaveable { mutableStateOf(false) }
@@ -152,6 +192,8 @@ fun CategoryScreen(
     var showTaskDialog by rememberSaveable { mutableStateOf(false) }
 
     var showPickTaskCategory by rememberSaveable { mutableStateOf(false) }
+
+
 
 
     LaunchedEffect(createResult) {
@@ -193,7 +235,7 @@ fun CategoryScreen(
 
 
         },
-        floatingActionButtonPosition = androidx.compose.material3.FabPosition.Start
+        floatingActionButtonPosition = FabPosition.Start
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
 
@@ -222,7 +264,6 @@ fun CategoryScreen(
             }
 
             val draggingKey = remember { mutableStateOf<Int?>(null) }
-
 
 
             fun isDescendantOfDragged(candidateParentId: Int, draggedId: Int): Boolean {
@@ -379,7 +420,7 @@ fun CategoryScreen(
                 val acc = (dragOffsetXById[id] ?: 0f) + deltaX
                 dragOffsetXById[id] = acc
 
-                val now = android.os.SystemClock.uptimeMillis()
+                val now = SystemClock.uptimeMillis()
                 val last = lastReparentAtById[id] ?: 0L
                 val canStep = (now - last) >= reparentDelayMs
                 if (!canStep) return@reparent
@@ -524,7 +565,7 @@ fun CategoryScreen(
                     siblingIndex = tws.task.siblingIndex,
                     priority = tws.task.priority,
 
-                )
+                    )
             },
             onDismiss = {
                 sheetMode = CategorySheetMode.OVERVIEW
@@ -578,11 +619,11 @@ fun CategoryScreen(
             onDeleteCompleted = { viewModel.deleteCompletedTasks(it) },
             onDeleteAll = { viewModel.deleteAllTasks(it) },
 
-        )
+            )
     }
 
     if (showDeleteConfirm && menuCategoryId != null) {
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("Delete category?") },
             text = { Text("Are you sure you want to delete this category?") },
@@ -602,7 +643,7 @@ fun CategoryScreen(
     }
 
     if (showRenameDialog && menuCategoryId != null) {
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { showRenameDialog = false },
             title = { Text("Rename") },
             text = {
@@ -713,8 +754,19 @@ fun CategoryScreen(
                     }
                 }
             },
-            onOpenSchedule = { showScheduleDialog = true },
+            onOpenSchedule = {
+                viewModel.startAddSchedule()
+                showScheduleDialog = true
+            },
             allowedChildLevels = childLevelUi.allowed,
+            schedules = schedules,
+            onClickSchedule = { key ->
+                viewModel.startEditScheduleByKey(key)
+                showScheduleDialog = true
+            },
+            onDeleteSchedule = { key ->
+                viewModel.deleteScheduleByKey(key)
+            },
         )
 
 
@@ -724,18 +776,25 @@ fun CategoryScreen(
         TaskScheduleDialog(
             taskName = taskDraft.name.ifBlank { "Task" },
             draft = scheduleDraft,
-            onDismiss = { showScheduleDialog = false },
+            onDismiss = {
+                showScheduleDialog = false
+                viewModel.finishEditSchedule()
+            },
             onTitleChange = viewModel::setScheduleTitle,
             onModeChange = viewModel::setScheduleMode,
             onStartChange = viewModel::setScheduleStart,
             onEndChange = viewModel::setScheduleEnd,
             onDurationChange = viewModel::setScheduleDuration,
-            onRepeatingChange = viewModel::setScheduleRepeating,
+            onRepeatingChange = viewModel::setRepeatEnabled,
             onConfirm = {
-                viewModel.markScheduleConfirmedForNewTask()
-                viewModel.saveScheduleForCurrentTask()
+                viewModel.confirmScheduleFromDialog()
+
                 showScheduleDialog = false
-            }
+            },
+            onDateChange = viewModel::setScheduleDate,
+            onRepeatIntervalChange = viewModel::setRepeatInterval,
+            onRepeatUnitChange = viewModel::setRepeatUnit,
+            onWeekdaysMaskChange=viewModel::setRepeatWeekdaysMask,
         )
     }
 
@@ -905,6 +964,237 @@ fun AddCategoryDialog(
     }
 }
 
+@Composable
+private fun JalaliDateRow(
+    selectedDate: LocalDate,
+    onChangeDate: (LocalDate) -> Unit
+) {
+    val openDialog = remember { mutableStateOf(false) }
+
+    val jalali = remember(selectedDate) { selectedDate.toJalali() }
+    val dateText = remember(selectedDate) { jalali.toFaText() }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { openDialog.value = true }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Filled.CalendarMonth, contentDescription = null)
+        Spacer(Modifier.width(12.dp))
+
+        Text(
+            text = dateText,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f)
+        )
+
+        IconButton(onClick = { onChangeDate(LocalDate.now()) }) {
+            Icon(Icons.Filled.Refresh, contentDescription = "today")
+        }
+    }
+
+
+    // دیالوگ تقویم شمسی
+    JalaliDatePickerDialog(
+        openDialog = openDialog,
+        initialDate = jalali,
+
+        onConfirm = { picked: JalaliCalendar ->
+            onChangeDate(picked.toLocalDate())
+        },
+
+        // محدودیت تاریخ نداشته باشیم
+        disableBeforeDate = null,
+        disableAfterDate = null,
+
+        onSelectDay = { /* لازم نیست کاری کنیم */ },
+
+        // رنگ‌ها از تم فعلی
+        backgroundColor = Color(0xFFF8F9FB),         // خیلی روشن، نرم و مدرن
+
+        textColor = Color(0xFF1C1C1E),                // مشکی نرم (نه کاملاً سیاه)
+        textDisabledColor = Color(0xFFB0B3B8),       // خاکستری ملایم
+
+        selectedIconColor = Color(0xFF00B894),        // سبز فیروزه‌ای زنده
+        textColorHighlight = Color(0xFF009E84),       // سبز کمی تیره‌تر برای انتخاب
+
+        dropDownColor = Color(0xFF1C1C1E),
+        dayOfWeekLabelColor = Color(0xFF6B7280),      // خاکستری متوسط برای شنبه/یکشنبه...
+
+        confirmBtnColor = Color(0xFF00B894),          // هم‌رنگ انتخاب
+        cancelBtnColor = Color(0xFF9CA3AF),           // خاکستری خنثی
+        todayBtnColor = Color(0xFF1C1C1E),
+        nextPreviousBtnColor = Color(0xFF00B894),    // فلش‌های ماه
+
+        fontFamily = FontFamily.Default,   // پیش‌فرض سیستم
+        fontSize = 18.sp     // پیش‌فرض کتابخانه
+    )
+
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RepeatEveryRow(
+    interval: Int,
+    unit: RepeatUnit,
+    onIntervalChange: (Int) -> Unit,
+    onUnitChange: (RepeatUnit) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    val unitLabel = when (unit) {
+        RepeatUnit.DAY -> "days"
+        RepeatUnit.WEEK -> "weeks"
+        RepeatUnit.MONTH -> "months"
+        RepeatUnit.YEAR -> "years"
+    }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Text("Repeat every")
+
+        Spacer(Modifier.width(10.dp))
+
+        // عدد 0..99 (ولی بهتره ذخیره رو 1..99 کنی)
+        TextField(
+            value = interval.toString(),
+            onValueChange = { v ->
+                val n = v.filter(Char::isDigit).take(2).toIntOrNull() ?: 0
+                onIntervalChange(n.coerceIn(0, 99))
+            },
+            singleLine = true,
+            modifier = Modifier
+                .width(54.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                errorContainerColor = Color.Transparent
+            ),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,   // ✅ فقط عدد
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    keyboardController?.hide()   // کیبورد بسته شود
+                    focusManager.clearFocus()    // فوکوس برداشته شود
+                }
+            )
+        )
+
+        Spacer(Modifier.width(10.dp))
+
+        // واحد (مثل مود، کشویی)
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded },
+            modifier = Modifier.weight(1f)
+        ) {
+            TextField(
+                value = unitLabel,
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                modifier = Modifier
+                    .width(132.dp)
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    errorContainerColor = Color.Transparent
+                ),
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                DropdownMenuItem(
+                    text = { Text("days") },
+                    onClick = { onUnitChange(RepeatUnit.DAY); expanded = false })
+                DropdownMenuItem(
+                    text = { Text("weeks") },
+                    onClick = { onUnitChange(RepeatUnit.WEEK); expanded = false })
+                DropdownMenuItem(
+                    text = { Text("months") },
+                    onClick = { onUnitChange(RepeatUnit.MONTH); expanded = false })
+                DropdownMenuItem(
+                    text = { Text("years") },
+                    onClick = { onUnitChange(RepeatUnit.YEAR); expanded = false })
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeekdayPickerRow(
+    selectedMask: Int,
+    onChangeMask: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Sa Su Mo Tu We Th Fr => بیت‌های 0..6
+    val days = listOf(
+        0 to "Sa", 1 to "Su", 2 to "Mo", 3 to "Tu",
+        4 to "We", 5 to "Th", 6 to "Fr",
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(top = 6.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        days.forEach { (bit, label) ->
+            val selected = (selectedMask and (1 shl bit)) != 0
+
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = CircleShape
+                    )
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        CircleShape
+                    )
+                    .clickable {
+                        val newMask =
+                            if (selected) selectedMask and (1 shl bit).inv()
+                            else selectedMask or (1 shl bit)
+                        onChangeMask(newMask)
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (selected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+
 
 @Composable
 private fun CategoryRow(
@@ -1000,15 +1290,15 @@ private fun TaskRow(
                 .clickable(
                     // ✅ مهم: کلیک دایره به کلیک ردیف نره
                     indication = null,
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    interactionSource = remember { MutableInteractionSource() }
                 ) { onToggleDone(id) }
         )
 
 
         // ✅ Priority marker
         val (pText, pColor) = when (item.task.priority) {
-            1 -> "*"  to Color(0xFF2E7D32) // سبز
-            2 -> "!"  to Color(0xFFF9A825) // زرد
+            1 -> "*" to Color(0xFF2E7D32) // سبز
+            2 -> "!" to Color(0xFFF9A825) // زرد
             3 -> "!!" to Color(0xFFC62828) // قرمز
             else -> "" to Color.Unspecified
         }
@@ -1472,7 +1762,6 @@ private fun CategoryOptionsSideSheet(
     onDeleteAll: (Int) -> Unit,
 ) {
 
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1485,7 +1774,7 @@ private fun CategoryOptionsSideSheet(
                 .background(Color.Black.copy(alpha = 0.45f))
                 .clickable(
                     indication = null,
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    interactionSource = remember { MutableInteractionSource() }
                 ) { onDismiss() }
         )
         Column(
@@ -1687,7 +1976,7 @@ private fun CategoryOptionsSideSheet(
                         onDragStartMaybeCollapseForTask = { onDragStartMaybeCollapseForTask(it) },
                         toggleExpandForTask = { toggleExpandForTask(it) },
                         onCompleteAll = { onCompleteAll(category.categoryId!!) },
-                        onUncompleteAll = { onUncompletedAll(category.categoryId!!) },
+                        onUncompletedAll = { onUncompletedAll(category.categoryId!!) },
                         onDeleteCompleted = { onDeleteCompleted(category.categoryId!!) },
                         onDeleteAll = { onDeleteAll(category.categoryId!!) },
                     )
@@ -1747,11 +2036,10 @@ private fun TasksModeContent(
     onDragStartMaybeCollapseForTask: (taskId: Int) -> Unit,
     toggleExpandForTask: (taskId: Int) -> Unit,
     onCompleteAll: () -> Unit,
-    onUncompleteAll: () -> Unit,
+    onUncompletedAll: () -> Unit,
     onDeleteCompleted: () -> Unit,
     onDeleteAll: () -> Unit,
 ) {
-
 
 
     var dragging by remember { mutableStateOf(false) }
@@ -1798,10 +2086,6 @@ private fun TasksModeContent(
         val id = item.task.id
         return pendingParentById[id] ?: item.task.parentTaskId
     }
-
-
-
-
 
 
     // وقتی درگ نداریم، با state.sync شو
@@ -1883,7 +2167,6 @@ private fun TasksModeContent(
     }
 
 
-
     // parent موثر: اگر pending داریم از آن استفاده کن
     fun effectiveParentId(id: Int): Int? {
         val p = pendingParentById[id] ?: entityById[id]?.parentTaskId
@@ -1943,7 +2226,7 @@ private fun TasksModeContent(
         val acc = (dragOffsetXById[id] ?: 0f) + deltaX
         dragOffsetXById[id] = acc
 
-        val now = android.os.SystemClock.uptimeMillis()
+        val now = SystemClock.uptimeMillis()
         val last = lastReparentAtById[id] ?: 0L
         val canStep = (now - last) >= reparentDelayMs
         if (!canStep) return@reparent
@@ -1995,21 +2278,29 @@ private fun TasksModeContent(
 
             Spacer(Modifier.width(8.dp))
 
-            Icon(
-                imageVector = iconFromKey(category.iconName),
-                contentDescription = null,
-                tint = colorFromHex(category.color),
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-
-            Text(
-                text = "Add task",
-                style = MaterialTheme.typography.titleLarge,
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .clickable { onAddTask() }
-            )
+                    .fillMaxWidth()
+                    .clickable { onAddTask() },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Icon(
+                    imageVector = iconFromKey(category.iconName),
+                    contentDescription = null,
+                    tint = colorFromHex(category.color),
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+
+                Text(
+                    text = "Add task",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier
+                        .weight(1f)
+
+                )
+            }
 
         }
 
@@ -2046,7 +2337,7 @@ private fun TasksModeContent(
                 sortMode = sortMode,
                 onChangeSort = { sortMode = it },
                 onCompleteAll = onCompleteAll,
-                onUncompletedAll = onUncompleteAll,
+                onUncompletedAll = onUncompletedAll,
                 onDeleteCompleted = onDeleteCompleted,
                 onDeleteAll = onDeleteAll
             )
@@ -2105,10 +2396,10 @@ private fun TasksModeContent(
                             val isDragActive = reorderState.draggingItemKey != null
 
                             val dismissState =
-                                androidx.compose.material3.rememberSwipeToDismissBoxState(
+                                rememberSwipeToDismissBoxState(
                                     confirmValueChange = { value ->
                                         // فقط سوایپ به چپ (EndToStart) را به حذف تبدیل کن
-                                        if (!isDragActive && value == androidx.compose.material3.SwipeToDismissBoxValue.EndToStart) {
+                                        if (!isDragActive && value == SwipeToDismissBoxValue.EndToStart) {
                                             pendingDeleteTaskId = id
                                             pendingDeleteTaskTitle = item.task.title
                                         }
@@ -2117,7 +2408,7 @@ private fun TasksModeContent(
                                     }
                                 )
 
-                            androidx.compose.material3.SwipeToDismissBox(
+                            SwipeToDismissBox(
                                 state = dismissState,
                                 enableDismissFromStartToEnd = false,
                                 enableDismissFromEndToStart = !isDragActive,
@@ -2161,7 +2452,7 @@ private fun TasksModeContent(
         }
 
         if (pendingDeleteTaskId != null) {
-            androidx.compose.material3.AlertDialog(
+            AlertDialog(
                 onDismissRequest = { pendingDeleteTaskId = null },
                 title = { Text("Delete task?") },
                 text = { Text("آیا از حذف این تسک مطمئن هستی؟\n\n${pendingDeleteTaskTitle}") },
@@ -2416,8 +2707,13 @@ fun AddTaskDialog(
     onOpenSchedule: () -> Unit,
     onPickCategory: () -> Unit,
     allowedChildLevels: Set<Int>,
+    schedules: List<TaskScheduleUi>,
+    onClickSchedule: (Int) -> Unit,
+    onDeleteSchedule: (Int) -> Unit,
 ) {
 
+    var pendingDeleteScheduleId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var pendingDeleteScheduleTitle by rememberSaveable { mutableStateOf("") }
 
 
     DimmedDialog(
@@ -2525,7 +2821,7 @@ fun AddTaskDialog(
 
                     Spacer(Modifier.weight(1f))
 
-                    VerticalDivider(thickness = 1.dp , modifier = Modifier.height(24.dp))
+                    VerticalDivider(thickness = 1.dp, modifier = Modifier.height(24.dp))
 
                     Spacer(Modifier.width(8.dp))
 
@@ -2631,10 +2927,150 @@ fun AddTaskDialog(
                     onClick = { onOpenSchedule() }
                 )
 
+                if (schedules.isNotEmpty()) {
+                    Column(Modifier.fillMaxWidth()) {
+                        schedules.forEach { ui ->
+                            ScheduleRow(
+                                schedule = ui.schedule,
+                                onClick = { onClickSchedule(ui.key) },
+                                onRequestDelete = {
+                                    // ✅ فقط درخواست حذف => دیالوگ باز شود
+                                    pendingDeleteScheduleId = ui.key
+                                    pendingDeleteScheduleTitle =
+                                        ui.schedule.title?.takeIf { it.isNotBlank() }
+                                            ?: taskNameForScheduleFallback(draft.name) // پایین تعریف می‌کنیم
+                                }
+                            )
+
+                            HorizontalDivider(thickness = 0.5.dp)
+                        }
+                    }
+                }
+
+
+                if (pendingDeleteScheduleId != null) {
+                    AlertDialog(
+                        onDismissRequest = { pendingDeleteScheduleId = null },
+                        title = { Text("Delete schedule?") },
+                        text = { Text("آیا از حذف این اسکچول مطمئن هستی؟\n\n$pendingDeleteScheduleTitle") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                val key = pendingDeleteScheduleId!!
+                                onDeleteSchedule(key) // وصل به viewModel.deleteScheduleByKey(key)
+                                pendingDeleteScheduleId = null
+                            }) { Text("Delete") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                pendingDeleteScheduleId = null
+                            }) { Text("Cancel") }
+                        }
+                    )
+                }
+
+
             }
         }
     }
 }
+
+private fun taskNameForScheduleFallback(taskName: String): String =
+    taskName.trim().ifBlank { "Task" }
+
+
+@Composable
+private fun ScheduleRow(
+    schedule: TaskSchedule,
+    onClick: () -> Unit,
+    onRequestDelete: () -> Unit
+) {
+    fun minuteToTime(min: Int): String {
+        val h = min / 60
+        val m = min % 60
+        return "%02d:%02d".format(h, m)
+    }
+
+    val icon = when (schedule.mode) {
+        ScheduleMode.TIME_RANGE -> Icons.Filled.DateRange
+        ScheduleMode.AMOUNT_OF_TIME -> Icons.Filled.Timer
+    }
+
+    val timeText = when (schedule.mode) {
+        ScheduleMode.TIME_RANGE -> {
+            val s = schedule.startMinuteOfDay ?: 0
+            val e = schedule.endMinuteOfDay ?: 0
+            "${minuteToTime(s)} - ${minuteToTime(e)}"
+        }
+
+        ScheduleMode.AMOUNT_OF_TIME -> {
+            val d = schedule.durationMinutes ?: 0
+            "$d min"
+        }
+    }
+
+    val dateText =
+        schedule.dateEpochDay?.let { epoch ->
+            LocalDate.ofEpochDay(epoch).toString()
+        } ?: "No date"
+
+    val repeatText = if (schedule.repeating) "Repeats" else "No repeat"
+
+    val reminderText = schedule.reminderMinutesBefore?.let { "Reminder: $it min before" } ?: ""
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null)
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(timeText, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = buildString {
+                    append(dateText)
+                    append(" • ")
+                    append(repeatText)
+                    if (reminderText.isNotBlank()) {
+                        append(" • ")
+                        append(reminderText)
+                    }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        ScheduleOptionsMenu(
+            onDelete = onRequestDelete
+        )
+    }
+}
+
+@Composable
+private fun ScheduleOptionsMenu(
+    onDelete: () -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Filled.MoreVert, contentDescription = "schedule menu")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Delete") },
+                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) },
+                onClick = { open = false; onDelete() }
+            )
+        }
+    }
+}
+
 
 @Composable
 private fun PriorityDots(selected: Int, onPick: (Int) -> Unit) {
@@ -2693,10 +3129,13 @@ private fun ChildLevelChip(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, style = MaterialTheme.typography.titleMedium, color = LocalContentColor.current.copy(alpha = alpha))
+        Text(
+            label,
+            style = MaterialTheme.typography.titleMedium,
+            color = LocalContentColor.current.copy(alpha = alpha)
+        )
     }
 }
-
 
 
 @Composable
@@ -2710,7 +3149,11 @@ fun TaskScheduleDialog(
     onEndChange: (LocalTime) -> Unit,
     onDurationChange: (Int) -> Unit,
     onRepeatingChange: (Boolean) -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    onDateChange: (LocalDate) -> Unit,
+    onRepeatIntervalChange: (Int) -> Unit,
+    onRepeatUnitChange: (RepeatUnit) -> Unit,
+    onWeekdaysMaskChange: (Int) -> Unit
 ) {
     DimmedDialog(
         onDismiss = onDismiss,
@@ -2721,7 +3164,13 @@ fun TaskScheduleDialog(
         dimAlpha = 0.6f,
         dismissOnBackdropClick = true
     ) {
-        Column(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+            ,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
 
             // top bar
             Row(
@@ -2739,7 +3188,7 @@ fun TaskScheduleDialog(
             HorizontalDivider()
 
             // title (کم‌رنگ پیش‌فرض)
-            OutlinedTextField(
+            TextField(
                 value = draft.title,
                 onValueChange = onTitleChange,
                 modifier = Modifier
@@ -2752,7 +3201,13 @@ fun TaskScheduleDialog(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
                     )
                 },
-                singleLine = true
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    errorContainerColor = Color.Transparent
+                ),
             )
 
             HorizontalDivider()
@@ -2763,8 +3218,9 @@ fun TaskScheduleDialog(
                 onPick = onModeChange
             )
 
-            HorizontalDivider()
+            HorizontalDivider(Modifier.padding(top = 8.dp))
 
+            //  TimePicker
             if (draft.mode == ScheduleMode.TIME_RANGE) {
                 // فعلاً ساده: نمایش متن + بعداً TimePicker
                 TimeRangeRow(
@@ -2782,6 +3238,24 @@ fun TaskScheduleDialog(
 
             HorizontalDivider()
 
+
+            if (draft.mode == ScheduleMode.TIME_RANGE || draft.mode == ScheduleMode.AMOUNT_OF_TIME) {
+
+
+                JalaliDateRow(
+                    selectedDate = draft.date,
+                    onChangeDate = { onDatePicked ->
+                        // چون draft از VM میاد، باید setter داشته باشی:
+                        // viewModel.setScheduleDate(onDatePicked)
+                        // اینجا فقط callback می‌گیریم:
+                        onDateChange(onDatePicked)
+                    }
+                )
+
+                HorizontalDivider()
+            }
+
+
             // Repeating
             Row(
                 Modifier
@@ -2790,10 +3264,33 @@ fun TaskScheduleDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Repeating", modifier = Modifier.weight(1f))
-                Switch(checked = draft.repeating, onCheckedChange = onRepeatingChange)
+                Switch(checked = draft.repeat.enabled, onCheckedChange = onRepeatingChange)
             }
 
             HorizontalDivider()
+
+            //RepeatOptions
+            if (draft.repeat.enabled) {
+
+                RepeatEveryRow(
+                    interval = draft.repeat.interval,
+                    unit = draft.repeat.unit,
+                    onIntervalChange = { onRepeatIntervalChange(it) },
+                    onUnitChange = { onRepeatUnitChange(it) }
+                )
+
+                if (draft.repeat.unit == RepeatUnit.WEEK) {
+                    WeekdayPickerRow(
+                        selectedMask = draft.repeat.weekdaysMask,
+                        onChangeMask = onWeekdaysMaskChange
+                    )
+                }
+
+                HorizontalDivider()
+            }
+
+
+
 
             // Note / Reminder placeholder (فعلاً)
             SheetActionRow(
@@ -2810,61 +3307,212 @@ fun TaskScheduleDialog(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModeDropdownRow(
     mode: ScheduleMode,
     onPick: (ScheduleMode) -> Unit
 ) {
-    var open by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable { open = true }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Time range", modifier = Modifier.weight(1f))
-        Text(
-            text = if (mode == ScheduleMode.TIME_RANGE) "Time range" else "Amount of time",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.width(8.dp))
-        Icon(Icons.Filled.ExpandMore, contentDescription = null)
+    var expanded by remember { mutableStateOf(false) }
+
+    val selectedLabel = when (mode) {
+        ScheduleMode.TIME_RANGE -> "Time range"
+        ScheduleMode.AMOUNT_OF_TIME -> "Amount of time"
     }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-        DropdownMenuItem(
-            text = { Text("Time range") },
-            onClick = { open = false; onPick(ScheduleMode.TIME_RANGE) }
-        )
-        DropdownMenuItem(
-            text = { Text("Amount of time") },
-            onClick = { open = false; onPick(ScheduleMode.AMOUNT_OF_TIME) }
-        )
+
+    val items = listOf(
+        ScheduleMode.TIME_RANGE to "Time range",
+        ScheduleMode.AMOUNT_OF_TIME to "Amount of time"
+    )
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // ✅ anchor = کل عرض دیالوگ
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryEditable), // یا Primary
+            contentAlignment = Alignment.Center
+        ) {
+            TextField(
+                value = selectedLabel,
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                label = { Text("Type") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier.width(220.dp), // ✅ کوچیک‌تر و وسط
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    textAlign = TextAlign.Center // ✅ متن وسط
+                ),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    errorContainerColor = Color.Transparent
+                ),
+            )
+        }
+
+        // ✅ منو هم‌عرض anchor (یعنی هم‌عرض دیالوگ) و زیر ردیف
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items.forEach { (value, label) ->
+                DropdownMenuItem(
+                    text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    onClick = {
+                        onPick(value)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TimeRangeRow(
     start: LocalTime,
     end: LocalTime,
     onStartChange: (LocalTime) -> Unit,
-    onEndChange: (LocalTime) -> Unit
+    onEndChange: (LocalTime) -> Unit,
 ) {
-    // فعلاً فقط نمایش، بعداً TimePicker می‌ذاریم
+    var showStartPicker by remember { mutableStateOf(false) }
+    var showEndPicker by remember { mutableStateOf(false) }
+
+    // وقتی Start تایید شد، این فلگ باعث میشه End بعدش باز بشه
+    var openEndAfterStart by remember { mutableStateOf(false) }
+
+    // یک مدت پیش‌فرض/آخرین مدت معتبر برای پیشنهاد End
+    var lastDurationMinutes by remember { mutableIntStateOf(60) }
+
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 18.dp),
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("$start", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.width(18.dp))
+        TimeChip(label = "Start", time = start) { showStartPicker = true }
         Text("-", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.width(18.dp))
-        Text("$end", style = MaterialTheme.typography.titleLarge)
+        TimeChip(label = "End", time = end) { showEndPicker = true }
+    }
+
+    if (showStartPicker) {
+        TimePickerDialog(
+            title = "Select start time",
+            initial = start,
+            onDismiss = {
+                showStartPicker = false
+                openEndAfterStart = false
+            },
+            onConfirm = { newStart ->
+                // مدت فعلی اگر معتبر بود نگه دار، وگرنه lastDuration همان 60 بماند
+                val duration = durationMinutesSameDay(start, end)
+                if (duration > 0) lastDurationMinutes = duration
+
+                // Start را ست کن
+                onStartChange(newStart)
+
+                // End پیشنهادی (برای نمایش اولیه در دیالوگ End)
+                val suggestedEnd =
+                    newStart.plusMinutesClamped(lastDurationMinutes).ensureAfter(newStart)
+                onEndChange(suggestedEnd)
+
+                // Start بسته، End خودکار باز
+                showStartPicker = false
+                openEndAfterStart = true
+            }
+        )
+    }
+
+    // ✅ نکته مهم: باز کردن دیالوگ End را با LaunchedEffect انجام بده
+    // تا در یک فریم، اول Start بسته شود بعد End باز شود (بدون تداخل)
+    LaunchedEffect(openEndAfterStart) {
+        if (openEndAfterStart) {
+            showEndPicker = true
+            openEndAfterStart = false
+        }
+    }
+
+    if (showEndPicker) {
+        TimePickerDialog(
+            title = "Select end time",
+            initial = end,
+            onDismiss = { showEndPicker = false },
+            onConfirm = { newEnd ->
+                val fixed = newEnd.ensureAfter(start)
+                // ✅ اینجا “برعکس نه” رعایت میشه: فقط End تغییر می‌کند
+                onEndChange(fixed)
+
+                // اگر end > start شد، lastDuration را آپدیت کن تا دفعه بعد پیشنهاد بهتر باشد
+                val d = durationMinutesSameDay(start, fixed)
+                if (d > 0) lastDurationMinutes = d
+
+                showEndPicker = false
+            }
+        )
     }
 }
+
+@Composable
+private fun TimeChip(
+    label: String,
+    time: LocalTime,
+    onClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        Spacer(Modifier.height(6.dp))
+        TextButton(onClick = onClick) {
+            Text(
+                "%02d:%02d".format(time.hour, time.minute),
+                style = MaterialTheme.typography.titleLarge
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimePickerDialog(
+    title: String,
+    initial: LocalTime,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalTime) -> Unit
+) {
+    val state = rememberTimePickerState(
+        initialHour = initial.hour,
+        initialMinute = initial.minute,
+        is24Hour = true
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { TimePicker(state = state) },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(
+                    LocalTime.of(
+                        state.hour,
+                        state.minute
+                    )
+                )
+            }) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
 
 @Composable
 private fun AmountOfTimeRow(
@@ -2890,5 +3538,4 @@ enum class ConfirmAction { SAVE_AND_CLOSE, SAVE_AND_CONTINUE }
 enum class TaskSortMode { NONE, BY_NAME, BY_PRIORITY, BY_COMPLETED }
 
 const val ROOT = -1
-
 

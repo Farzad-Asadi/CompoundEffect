@@ -8,9 +8,11 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.category.Categor
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.Task
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskRepository
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskWithSchedule
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.RepeatUnit
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.ScheduleMode
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskSchedule
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskScheduleRepository
+import com.example.compoundeffectV1_01.utils.ceilToNextQuarter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -30,6 +32,8 @@ import java.time.LocalDate
 import java.time.LocalTime
 import javax.inject.Inject
 
+
+
 @HiltViewModel
 class CategoryViewModel @Inject constructor(
     private val categoryRepository: CategoryRepository,
@@ -37,7 +41,8 @@ class CategoryViewModel @Inject constructor(
     private val scheduleRepo: TaskScheduleRepository,
 ) : ViewModel() {
 
-
+    private var nextTempScheduleId = -1
+    private fun newTempId(): Int = nextTempScheduleId--
 
     // این دو تا برای سناریوی “درگ شروع شد/تمام شد”
     private val _dragCollapsedRestoreCategory = MutableStateFlow<Int?>(null)
@@ -220,6 +225,34 @@ class CategoryViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChildLevelUi())
 
 
+
+    private val _editingScheduleKey = MutableStateFlow<Int?>(null)
+    val editingScheduleKey = _editingScheduleKey.asStateFlow()
+
+
+    private var pendingKeyCounter = -1
+
+    private val _pendingSchedulesForNewTask = MutableStateFlow<List<TaskScheduleUi>>(emptyList())
+    private val pendingSchedulesForNewTask = _pendingSchedulesForNewTask.asStateFlow()
+
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val schedulesUiForTaskDialog: StateFlow<List<TaskScheduleUi>> =
+        editingTaskId.flatMapLatest { tid ->
+            if (tid == null) {
+                pendingSchedulesForNewTask
+            } else {
+                scheduleRepo.observeByTaskId(tid).map { list ->
+                    list.map { sch ->
+                        TaskScheduleUi(
+                            key = sch.id!!,       // چون DB هست id دارد
+                            schedule = sch,
+                            isPending = false
+                        )
+                    }
+                }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
 
 
@@ -424,10 +457,13 @@ class CategoryViewModel @Inject constructor(
 
     //تسک ها
     fun startAddTask(categoryId: Int) {
+        _editingTaskId.value = null   // ✅ اضافه کن
         _taskDraft.value = TaskDraft(categoryId = categoryId)
-        _scheduleDraft.value = ScheduleDraft()          // ✅ ریست
+        _scheduleDraft.value = ScheduleDraft()
         _scheduleConfirmedForNewTask.value = false
+        _pendingSchedulesForNewTask.value = emptyList()
     }
+
     fun startEditTask(taskId: Int) {
         viewModelScope.launch {
             val t = taskRepo.getTaskById(taskId) ?: return@launch
@@ -449,24 +485,9 @@ class CategoryViewModel @Inject constructor(
             )
 
             val sch = scheduleRepo.getByTaskId(taskId)
+            _scheduleDraft.value = sch?.toDraft() ?: ScheduleDraft()
 
-            fun minuteOfDayToLocalTime(min: Int): LocalTime =
-                LocalTime.of(min / 60, min % 60)
 
-            _scheduleDraft.value =
-                if (sch == null) {
-                    ScheduleDraft()
-                } else {
-                    ScheduleDraft(
-                        title = sch.title.orEmpty(),
-                        mode = sch.mode,
-                        date = sch.dateEpochDay?.let(LocalDate::ofEpochDay) ?: LocalDate.now(),
-                        start = sch.startMinuteOfDay?.let(::minuteOfDayToLocalTime) ?: LocalTime.of(20, 0),
-                        end = sch.endMinuteOfDay?.let(::minuteOfDayToLocalTime) ?: LocalTime.of(21, 0),
-                        durationMinutes = sch.durationMinutes ?: 60,
-                        repeating = sch.repeating
-                    )
-                }
         }
     }
     fun setTaskName(v: String) = _taskDraft.update { it.copy(name = v) }
@@ -475,9 +496,6 @@ class CategoryViewModel @Inject constructor(
     fun setTaskNote(v: String) = _taskDraft.update { it.copy(note = v) }
     fun setTaskInsertAtTop(v: Boolean) = _taskDraft.update { it.copy(insertAtTop = v) }
     fun setTaskChildLevel(v: Int) = _taskDraft.update { it.copy(childLevel = v.coerceIn(0, 3)) }
-    fun markScheduleConfirmedForNewTask() {
-        _scheduleConfirmedForNewTask.value = true
-    }
     fun resetTaskDraftKeepSomeDefaults() {
         val cur = _taskDraft.value
         _taskDraft.value = TaskDraft(
@@ -551,14 +569,25 @@ class CategoryViewModel @Inject constructor(
                 siblingIndex = newSiblingIndex
             )
 
-            val newIdLong = withContext(Dispatchers.IO) {
+            val newId = withContext(Dispatchers.IO) {
                 taskRepo.insertTaskAndReturnId(newTask) // Long
             }
-            val newId = newIdLong.toInt()
+            val pending = _pendingSchedulesForNewTask.value
+            if (pending.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    pending.forEach { ui ->
+                        scheduleRepo.insert(ui.schedule.copy(taskId = newId))
+                    }
+                }
+                _pendingSchedulesForNewTask.value = emptyList()
+            }
+
+
 
             if (_scheduleConfirmedForNewTask.value) {
                 val sd = _scheduleDraft.value
                 fun LocalTime.toMinuteOfDay(): Int = hour * 60 + minute
+                val safeInterval = sd.repeat.interval.coerceIn(1, 99)
 
                 val schedule = TaskSchedule(
                     id = null,
@@ -570,7 +599,13 @@ class CategoryViewModel @Inject constructor(
                     endMinuteOfDay = if (sd.mode == ScheduleMode.TIME_RANGE) sd.end.toMinuteOfDay() else null,
                     durationMinutes = if (sd.mode == ScheduleMode.AMOUNT_OF_TIME) sd.durationMinutes else null,
                     inPallet = false,
-                    repeating = sd.repeating
+                    repeating = sd.repeat.enabled,
+                    repeatInterval = if (sd.repeat.enabled) safeInterval else null,
+                    repeatUnit = if (sd.repeat.enabled) sd.repeat.unit else null,
+                    weekdaysMask = if (sd.repeat.enabled && sd.repeat.unit == RepeatUnit.WEEK)
+                        sd.repeat.weekdaysMask.coerceIn(0, 127)
+                    else null
+
                 )
 
                 withContext(Dispatchers.IO) { scheduleRepo.upsert(schedule) }
@@ -855,42 +890,173 @@ class CategoryViewModel @Inject constructor(
     fun setScheduleStart(t: LocalTime) = _scheduleDraft.update { it.copy(start = t) }
     fun setScheduleEnd(t: LocalTime) = _scheduleDraft.update { it.copy(end = t) }
     fun setScheduleDuration(min: Int) = _scheduleDraft.update { it.copy(durationMinutes = min.coerceAtLeast(1)) }
-    fun setScheduleRepeating(v: Boolean) = _scheduleDraft.update { it.copy(repeating = v) }
-    fun saveScheduleForCurrentTask() {
-        val taskId = _editingTaskId.value ?: return
+    fun confirmScheduleFromDialog() {
+        val sd = _scheduleDraft.value
+        fun LocalTime.toMinuteOfDay() = hour * 60 + minute
 
-        viewModelScope.launch {
-            val d = _scheduleDraft.value
+        val tid = _editingTaskId.value
+        val key = _editingScheduleKey.value
 
-            fun java.time.LocalTime.toMinuteOfDay(): Int = this.hour * 60 + this.minute
+        val safeInterval = sd.repeat.interval.coerceIn(1, 99)
+        val safeMask = sd.repeat.weekdaysMask.coerceIn(0, 127)
 
-            // (اختیاری) اعتبارسنجی برای TIME_RANGE
-            if (d.mode == ScheduleMode.TIME_RANGE) {
-                val s = d.start.toMinuteOfDay()
-                val e = d.end.toMinuteOfDay()
-                if (e <= s) return@launch // یا اینجا خطا/اسنک‌بار بده
+        val newSchedule = TaskSchedule(
+            id = if (tid != null) key else null,
+            taskId = tid ?: 0,
+            title = sd.title.trim().ifBlank { null },
+            mode = sd.mode,
+            dateEpochDay = if (sd.mode == ScheduleMode.TIME_RANGE) sd.date.toEpochDay() else null,
+            startMinuteOfDay = if (sd.mode == ScheduleMode.TIME_RANGE) sd.start.toMinuteOfDay() else null,
+            endMinuteOfDay = if (sd.mode == ScheduleMode.TIME_RANGE) sd.end.toMinuteOfDay() else null,
+            durationMinutes = if (sd.mode == ScheduleMode.AMOUNT_OF_TIME) sd.durationMinutes else null,
+
+            inPallet = false,
+
+            repeating = sd.repeat.enabled,
+            repeatInterval = if (sd.repeat.enabled) safeInterval else null,
+            repeatUnit = if (sd.repeat.enabled) sd.repeat.unit else null,
+
+            // ✅ NEW
+            weekdaysMask = if (sd.repeat.enabled && sd.repeat.unit == RepeatUnit.WEEK) safeMask else null
+        )
+
+        if (tid == null) {
+            // ===== pending mode =====
+            if (key == null) {
+                // add pending
+                val newKey = pendingKeyCounter--
+                _pendingSchedulesForNewTask.update {
+                    it + TaskScheduleUi(newKey, newSchedule, isPending = true)
+                }
+            } else {
+                // edit pending
+                _pendingSchedulesForNewTask.update { list ->
+                    list.map { ui ->
+                        if (ui.key == key) ui.copy(schedule = newSchedule) else ui
+                    }
+                }
             }
+            finishEditSchedule()
+        } else {
+            // ===== DB mode =====
+            viewModelScope.launch(Dispatchers.IO) {
+                scheduleRepo.upsert(newSchedule.copy(taskId = tid))
+            }
+            finishEditSchedule()
+        }
+    }
+    private fun TaskSchedule.toDraft(): ScheduleDraft {
+        fun minuteToLocalTime(min: Int) = LocalTime.of(min / 60, min % 60)
 
-            val schedule = TaskSchedule(
-                id = null, // اگر upsert بر اساس taskId unique باشه، null هم اوکیه
-                taskId = taskId,
-                title = d.title.trim().ifBlank { null },
-                mode = d.mode,
+        val enabled = repeating
+        val unit = repeatUnit ?: RepeatUnit.DAY
 
-                dateEpochDay = if (d.mode == ScheduleMode.TIME_RANGE) d.date.toEpochDay() else null,
-                startMinuteOfDay = if (d.mode == ScheduleMode.TIME_RANGE) d.start.toMinuteOfDay() else null,
-                endMinuteOfDay = if (d.mode == ScheduleMode.TIME_RANGE) d.end.toMinuteOfDay() else null,
+        return ScheduleDraft(
+            title = title.orEmpty(),
+            mode = mode,
+            date = dateEpochDay?.let(LocalDate::ofEpochDay) ?: LocalDate.now(),
+            start = startMinuteOfDay?.let(::minuteToLocalTime) ?: LocalTime.of(20, 0),
+            end = endMinuteOfDay?.let(::minuteToLocalTime) ?: LocalTime.of(21, 0),
+            durationMinutes = durationMinutes ?: 60,
 
-                durationMinutes = if (d.mode == ScheduleMode.AMOUNT_OF_TIME) d.durationMinutes else null,
-                inPallet = false,
-                repeating = d.repeating
+            repeat = RepeatDraft(
+                enabled = enabled,
+                interval = (repeatInterval ?: 1).coerceIn(1, 99),
+                unit = unit,
+                weekdaysMask = (weekdaysMask ?: 0).coerceIn(0, 127)
             )
+        )
+    }
 
-            withContext(Dispatchers.IO) {
-                scheduleRepo.upsert(schedule)
+
+    fun startEditScheduleByKey(key: Int) {
+        viewModelScope.launch {
+            _editingScheduleKey.value = key
+
+            val tid = _editingTaskId.value
+            val schedule: TaskSchedule? =
+                if (tid == null) {
+                    // pending
+                    _pendingSchedulesForNewTask.value.firstOrNull { it.key == key }?.schedule
+                } else {
+                    // DB
+                    schedulesUiForTaskDialog.value.firstOrNull { it.key == key }?.schedule
+                    // یا اگر می‌خوای مطمئن‌تر: scheduleRepo.getById(key)
+                }
+
+            schedule ?: return@launch
+            _scheduleDraft.value = schedule.toDraft()
+        }
+    }
+    fun finishEditSchedule() {
+        _editingScheduleKey.value = null
+        _scheduleDraft.value = ScheduleDraft()
+    }
+    fun deleteScheduleByKey(key: Int) {
+        val tid = _editingTaskId.value
+        if (tid == null) {
+            // pending delete
+            _pendingSchedulesForNewTask.update { list -> list.filterNot { it.key == key } }
+        } else {
+            // DB delete
+            viewModelScope.launch(Dispatchers.IO) {
+                val target = schedulesUiForTaskDialog.value.firstOrNull { it.key == key }?.schedule
+                if (target != null) scheduleRepo.delete(target)
             }
         }
     }
+    fun startAddSchedule() {
+        _editingScheduleKey.value = null      // یعنی Add schedule (نه edit)
+        _scheduleDraft.value = defaultScheduleDraftNow()
+    }
+    fun setScheduleDate(d: LocalDate) = _scheduleDraft.update { it.copy(date = d) }
+    fun setRepeatEnabled(v: Boolean) {
+        _scheduleDraft.update { it.copy(repeat = it.repeat.copy(enabled = v)) }
+    }
+
+    fun setRepeatInterval(n: Int) {
+        _scheduleDraft.update {
+            it.copy(repeat = it.repeat.copy(interval = n.coerceIn(1, 99)))
+        }
+    }
+
+    fun setRepeatUnit(u: RepeatUnit) {
+        _scheduleDraft.update { d ->
+            val r = d.repeat
+            val newMask =
+                if (u == RepeatUnit.WEEK && r.weekdaysMask == 0) {
+                    // پیش‌فرض: امروز تیک بخورد
+                    1 shl todayBitIndex()
+                } else r.weekdaysMask
+
+            d.copy(repeat = r.copy(unit = u, weekdaysMask = newMask))
+        }
+    }
+
+    fun setRepeatWeekdaysMask(mask: Int) {
+        _scheduleDraft.update { it.copy(repeat = it.repeat.copy(weekdaysMask = mask.coerceIn(0, 127))) }
+    }
+
+    // Sa..Fr => 0..6
+    private fun todayBitIndex(): Int {
+        // اگر خواستی دقیق با تقویم خودت تنظیم می‌کنیم؛
+        // فعلاً یک نگاشت ساده:
+        val dow = java.time.LocalDate.now().dayOfWeek // MON..SUN
+        return when (dow) {
+            java.time.DayOfWeek.SATURDAY -> 0
+            java.time.DayOfWeek.SUNDAY -> 1
+            java.time.DayOfWeek.MONDAY -> 2
+            java.time.DayOfWeek.TUESDAY -> 3
+            java.time.DayOfWeek.WEDNESDAY -> 4
+            java.time.DayOfWeek.THURSDAY -> 5
+            java.time.DayOfWeek.FRIDAY -> 6
+        }
+    }
+
+
+
+
+
 
 
 
@@ -1178,6 +1344,30 @@ class CategoryViewModel @Inject constructor(
         _taskDraft.value = TaskDraft()
     }
 
+    //ساخت پیش‌فرض Start/End با زمان فعلی
+    private fun defaultScheduleDraftNow(): ScheduleDraft {
+        val now = LocalTime.now()
+        val start = now.ceilToNextQuarter()
+        val end = start.plusMinutes(60)
+
+        return ScheduleDraft(
+            title = "",
+            mode = ScheduleMode.TIME_RANGE,
+            date = LocalDate.now(),
+            start = start,
+            end = end,
+            durationMinutes = 60,
+
+            // ✅ تکرار پیش‌فرض خاموش
+            repeat = RepeatDraft(
+                enabled = false,
+                interval = 1,
+                unit = RepeatUnit.DAY,
+                weekdaysMask = 0
+            )
+        )
+    }
+
 
 
 
@@ -1264,9 +1454,9 @@ data class ScheduleDraft(
     val date: LocalDate = LocalDate.now(),
     val start: LocalTime = LocalTime.of(20, 0),
     val end: LocalTime = LocalTime.of(21, 0),
-
     val durationMinutes: Int = 60,
-    val repeating: Boolean = false
+
+    val repeat: RepeatDraft = RepeatDraft()
 )
 
 data class TaskRenderItem(
@@ -1280,4 +1470,17 @@ data class TaskRenderItem(
 data class ChildLevelUi(
     val allowed: Set<Int> = setOf(0),
     val maxAllowed: Int = 0
+)
+
+data class TaskScheduleUi(
+    val key: Int,              // برای pending منفی، برای DB همون id
+    val schedule: TaskSchedule,
+    val isPending: Boolean
+)
+
+data class RepeatDraft(
+    val enabled: Boolean = false,
+    val interval: Int = 1,
+    val unit: RepeatUnit = RepeatUnit.DAY,
+    val weekdaysMask: Int = 0
 )

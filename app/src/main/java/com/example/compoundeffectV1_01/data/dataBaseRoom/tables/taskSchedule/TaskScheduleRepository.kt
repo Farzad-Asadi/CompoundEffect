@@ -5,11 +5,12 @@ import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
 interface TaskScheduleRepository {
-    fun observeByTaskId(taskId: Int): Flow<TaskSchedule?>
+    fun observeByTaskId(taskId: Int): Flow<List<TaskSchedule>>
     suspend fun getByTaskId(taskId: Int): TaskSchedule?
     suspend fun upsert(schedule: TaskSchedule)
+    suspend fun delete(schedule: TaskSchedule)
     suspend fun deleteByTaskId(taskId: Int)
-
+    suspend fun deleteAllForTask(taskId: Int)
 
     suspend fun insert(schedule: TaskSchedule): Int
     suspend fun updateTimeRange(scheduleId: Int, date: LocalDate, startMin: Int, endMin: Int)

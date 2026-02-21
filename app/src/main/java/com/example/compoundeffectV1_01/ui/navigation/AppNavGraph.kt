@@ -17,18 +17,18 @@ import com.example.compoundeffectV1_01.ui.scheduleScreen.ScheduleScreen2
 fun AppNavGraph(
     navController: NavHostController,
     modifier: Modifier = Modifier,
-    startDestination: String = AppRoutes.Category2
+    startDestination: String = AppRoutes.SCHEDULE
 ) {
     NavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = modifier
     ) {
-        composable(AppRoutes.Category2) {
+        composable(AppRoutes.CATEGORY) {
             CategoryScreen(
             )
         }
-        composable(AppRoutes.Schedule2) {
+        composable(AppRoutes.SCHEDULE) {
             ScheduleScreen2(
 
             )
@@ -44,8 +44,8 @@ fun AppNavGraph(
 
 
 object AppRoutes {
-    const val Category2 = "category2"
-    const val Schedule2 = "schedule2"
+    const val CATEGORY = "category"
+    const val SCHEDULE = "schedule"
 }
 
 
@@ -62,12 +62,12 @@ data class AppBottomBarDestination(
 )
 val bottomBarDestinations = listOf(
     AppBottomBarDestination(
-        route = AppRoutes.Schedule2,
+        route = AppRoutes.SCHEDULE,
         label = "Schedule",
         icon = Icons.Filled.Schedule
     ),
     AppBottomBarDestination(
-        route = AppRoutes.Category2,
+        route = AppRoutes.CATEGORY,
         label = "Category",
         icon = Icons.Filled.Category
     ),

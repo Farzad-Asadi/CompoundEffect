@@ -42,11 +42,15 @@ data class TaskSchedule(
     // برای AMOUNT_OF_TIME
     val durationMinutes: Int? = null,
 
-
+    val reminderMinutesBefore: Int? = null,
 
     val inPallet: Boolean = false,
 
-    val repeating: Boolean = false
+    val repeating: Boolean = false,
+    val repeatInterval: Int? = null,
+    val repeatUnit: RepeatUnit? = null,
+    val weekdaysMask: Int? = null,  // ✅ NEW: فقط وقتی repeatUnit=WEEK معنی دارد (0..127)
+
 )
 
 
@@ -56,3 +60,4 @@ data class TaskSchedule(
 
 
 enum class ScheduleMode { TIME_RANGE, AMOUNT_OF_TIME }
+enum class RepeatUnit { DAY, WEEK, MONTH, YEAR }

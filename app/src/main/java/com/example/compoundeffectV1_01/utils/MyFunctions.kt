@@ -10,11 +10,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ParentDataModifier
 import androidx.compose.ui.unit.Density
+import ir.huri.jcal.JalaliCalendar
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Calendar
+import java.util.GregorianCalendar
 import kotlin.math.roundToInt
 
 @Composable
@@ -171,11 +174,54 @@ fun currentTimeHeightPx(timeInstance: Calendar, hourHeight: Float): Int {
 }
 
 
+fun durationMinutesSameDay(start: LocalTime, end: LocalTime): Int {
+    val s = start.hour * 60 + start.minute
+    val e = end.hour * 60 + end.minute
+    return e - s
+}
+
+fun LocalTime.plusMinutesClamped(minutes: Int): LocalTime {
+    val total = (hour * 60 + minute) + minutes
+    val clamped = total.coerceIn(0, 23 * 60 + 59)
+    return LocalTime.of(clamped / 60, clamped % 60)
+}
+
+fun LocalTime.ensureAfter(start: LocalTime): LocalTime {
+    val s = start.hour * 60 + start.minute
+    val e = hour * 60 + minute
+    if (e > s) return this
+    val fixed = (s + 1).coerceAtMost(23 * 60 + 59)
+    return LocalTime.of(fixed / 60, fixed % 60)
+}
+
+fun LocalTime.ceilToNextQuarter(): LocalTime {
+    val total = hour * 60 + minute
+    val ceil = ((total + 14) / 15) * 15   // ceil to 15
+    val wrapped = ceil % (24 * 60)
+    return LocalTime.of(wrapped / 60, wrapped % 60)
+}
 
 
+fun LocalDate.toJalali(): JalaliCalendar {
+    val g = GregorianCalendar(this.year, this.monthValue - 1, this.dayOfMonth)
+    return JalaliCalendar(g)
+}
 
+fun JalaliCalendar.toLocalDate(): LocalDate {
+    val g: Calendar = this.toGregorian()
+    return LocalDate.of(
+        g.get(Calendar.YEAR),
+        g.get(Calendar.MONTH) + 1,
+        g.get(Calendar.DAY_OF_MONTH)
+    )
+}
 
-
+fun JalaliCalendar.toFaText(): String {
+    // نمونه خروجی: 1404/02/03  (یا اگر دوست داری monthString هم می‌تونی استفاده کنی)
+    val m = this.month.toString().padStart(2, '0')
+    val d = this.day.toString().padStart(2, '0')
+    return "${this.year}/$m/$d"
+}
 
 
 
