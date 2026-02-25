@@ -21,6 +21,7 @@ interface TaskScheduleRepository {
 
     suspend fun deleteById(scheduleId: Int)
     suspend fun countByTaskId(taskId: Int): Int
+    suspend fun getById(id: Int): TaskSchedule?
 
     suspend fun setSchedulePalletState(scheduleId: Int, inPallet: Boolean)
     suspend fun getLastInactiveTimeRange(taskId: Int, mode: ScheduleMode = ScheduleMode.TIME_RANGE): TaskSchedule?

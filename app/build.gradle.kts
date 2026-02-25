@@ -1,14 +1,18 @@
+import com.android.build.gradle.ProguardFiles.getDefaultProguardFile
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
-    alias(libs.plugins.hilt)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.com.google.devtools.ksp)
-    kotlin("kapt")
+    alias(libs.plugins.hilt)
+    id("org.jetbrains.kotlin.kapt")
 }
+
 
 android {
     namespace = "com.example.compoundeffectV1_01"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.compoundeffectV1_01"
@@ -43,7 +47,7 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
+//        kotlinCompilerExtensionVersion = "1.5.14"
     }
     packaging {
         resources {
@@ -60,13 +64,6 @@ configurations.matching {
     resolutionStrategy.force("com.squareup:javapoet:1.13.0")
 }
 
-configurations.all {
-    resolutionStrategy.force(
-        "org.jetbrains.kotlin:kotlin-stdlib:1.9.24",
-        "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24",
-        "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24",
-    )
-}
 
 
 dependencies {
@@ -83,6 +80,8 @@ dependencies {
 
 
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.hilt.common)
+    implementation(libs.androidx.work.runtime.ktx)
 
 
 
@@ -116,6 +115,8 @@ dependencies {
     implementation(libs.hilt.android)
     kapt(libs.hilt.android.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    kapt("androidx.hilt:hilt-compiler:1.2.0")
 
     //lazy Reorderable
     implementation(libs.reorderable)

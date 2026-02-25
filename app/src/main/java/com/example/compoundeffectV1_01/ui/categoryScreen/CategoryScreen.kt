@@ -4,9 +4,11 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -157,6 +159,7 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.Task
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.RepeatUnit
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.ScheduleMode
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskSchedule
+import com.example.compoundeffectV1_01.data.notification.rememberPostNotificationsPermissionRequester
 import com.example.compoundeffectV1_01.data.sharedViewModel.MainSharedViewModel
 import com.example.compoundeffectV1_01.ui.navigation.AppGraphRoutes
 import com.example.compoundeffectV1_01.utils.DimmedDialog
@@ -182,6 +185,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.math.roundToInt
 
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @SuppressLint("SuspiciousIndentation", "UnrememberedGetBackStackEntry")
 @Composable
 fun CategoryScreen(
@@ -206,7 +210,7 @@ fun CategoryScreen(
     val reminders by viewModel.remindersUiForScheduleDialog.collectAsState()
     val reminderDraft by viewModel.reminderDraft.collectAsState()
     val editingReminderKey by viewModel.editingReminderKey.collectAsState()
-
+    val requestPostNotifPermission = rememberPostNotificationsPermissionRequester()
 
     var showPickParent by rememberSaveable { mutableStateOf(false) }
 
@@ -903,8 +907,10 @@ fun CategoryScreen(
             onAlarmSoundUriChange = viewModel::setReminderAlarmSoundUri,
             onCaptchaEnabledChange = viewModel::setReminderCaptchaEnabled,
             onConfirm = {
-                viewModel.confirmReminderFromDialog()
-                showReminderDialog = false
+                requestPostNotifPermission { granted ->
+                    viewModel.confirmReminderFromDialog()
+                    showReminderDialog = false
+                }
             }
         )
     }
@@ -1687,9 +1693,9 @@ fun ReminderRow(
     AddEditeDialogRow(
         onClick = onClick,
         content = {
-            Row (
+            Row(
                 verticalAlignment = Alignment.CenterVertically
-            ){
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Notifications,
                     contentDescription = null
@@ -2426,9 +2432,6 @@ fun AddEditeReminderDialog(
             }
 
 
-
-
-
             // ====== Strength (step bar) ======
             StrengthRow(
                 strength = draft.strength,
@@ -2757,8 +2760,8 @@ private fun IntervallicRows(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text="Repeat over the range",
-                    fontSize =13.sp,
+                    text = "Repeat over the range",
+                    fontSize = 13.sp,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -2798,7 +2801,7 @@ private fun StrengthRow(
         ReminderStrengthMode.ALARM_AND_CAPTCHA -> 2
     }
     val state = when (strength) {
-        ReminderStrengthMode.NOTIFICATION ->"Notification"
+        ReminderStrengthMode.NOTIFICATION -> "Notification"
         ReminderStrengthMode.ALARM -> "Alarm"
         ReminderStrengthMode.ALARM_AND_CAPTCHA -> "Alarm+Captcha"
     }

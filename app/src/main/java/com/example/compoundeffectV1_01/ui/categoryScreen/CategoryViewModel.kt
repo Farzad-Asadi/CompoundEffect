@@ -18,6 +18,7 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.Rep
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.ScheduleMode
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskSchedule
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskScheduleRepository
+import com.example.compoundeffectV1_01.data.workManager.ReminderScheduler
 import com.example.compoundeffectV1_01.utils.ceilToNextQuarter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +48,7 @@ class CategoryViewModel @Inject constructor(
     private val taskRepo: TaskRepository,
     private val scheduleRepo: TaskScheduleRepository,
     private val reminderRepo: TaskReminderRepository,
+    private val reminderScheduler: ReminderScheduler,
 ) : ViewModel() {
 
     private var nextTempScheduleId = -1
@@ -672,7 +674,12 @@ class CategoryViewModel @Inject constructor(
 
                         val reminders = pendingRemindersMap[schUi.key].orEmpty()
                         reminders.forEach { rUi ->
-                            reminderRepo.upsert(rUi.entity.copy(id = 0, scheduleId = newScheduleId))
+                            val rid = reminderRepo.upsert(
+                                rUi.entity.copy(id = 0, scheduleId = newScheduleId)
+                            )
+                            try {
+                                reminderScheduler.reschedule(rid)   // ✅ این خط حیاتی است
+                            } catch (_: Throwable) {}
                         }
                     }
                 }
@@ -1045,22 +1052,34 @@ class CategoryViewModel @Inject constructor(
         } else {
             // ===== DB mode =====
             viewModelScope.launch(Dispatchers.IO) {
-                val scheduleId: Int = withContext(Dispatchers.IO) {
-                    scheduleRepo.upsertAndReturnId(newSchedule.copy(taskId = tid))
-                }
 
-                val reminders = _pendingRemindersForScheduleDraft.value
-                if (reminders.isNotEmpty()) {
-                    withContext(Dispatchers.IO) {
+                val isCreatingNew = (key == null)  // ✅ مهم
+
+                val scheduleId = scheduleRepo.upsertAndReturnId(
+                    newSchedule.copy(taskId = tid, id = key) // (اختیاری برای شفافیت)
+                )
+
+                if (isCreatingNew) {
+                    val reminders = _pendingRemindersForScheduleDraft.value
+                    if (reminders.isNotEmpty()) {
                         reminders.forEach { ui ->
-                            reminderRepo.upsert(ui.entity.copy(id = 0, scheduleId = scheduleId))
+                            val rid = reminderRepo.upsert(ui.entity.copy(id = 0, scheduleId = scheduleId))
+                            try { reminderScheduler.reschedule(rid) } catch (_: Throwable) {}
                         }
                     }
-                    _pendingRemindersForScheduleDraft.value = emptyList()
                 }
 
+                withContext(Dispatchers.Main) {
+                    // ✅ فقط وقتی schedule جدید ساختی لازم است از draft به DB سوئیچ کنی
+                    if (isCreatingNew) {
+                        _editingScheduleKey.value = scheduleId
+                        _pendingRemindersForScheduleDraft.value = emptyList()
+                    }
+
+                    finishEditSchedule()
+                }
             }
-            finishEditSchedule()
+
         }
     }
     private fun TaskSchedule.toDraft(): ScheduleDraft {
@@ -1275,12 +1294,17 @@ class CategoryViewModel @Inject constructor(
         }
 
         // 3) DB
+        // 3) DB
         viewModelScope.launch(Dispatchers.IO) {
-            // schKey اینجا scheduleId واقعی است
-            reminderRepo.upsert(buildEntity(scheduleId = schKey))
-        }
+            val reminderId = reminderRepo.upsert(buildEntity(scheduleId = schKey))
+            reminderScheduler.reschedule(reminderId)
 
-        finishEditReminder()
+            withContext(Dispatchers.Main) {
+                finishEditReminder()
+            }
+        }
+        return
+
     }
     fun deleteReminderByKey(key: Int) {
         val tid = _editingTaskId.value
@@ -1483,7 +1507,7 @@ class CategoryViewModel @Inject constructor(
 
 
 
-
+    private fun workName(reminderId: Int) = "reminder_$reminderId"
 
     private fun buildTaskMiniAll(tasks: List<Task>, schedules: Map<Int, Boolean> = emptyMap()): List<TaskMiniUi> =
         tasks.mapNotNull { t ->

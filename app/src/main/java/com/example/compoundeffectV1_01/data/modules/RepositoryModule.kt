@@ -1,5 +1,6 @@
 package com.example.compoundeffectV1_01.data.modules
 
+import android.content.Context
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.appSystemInfo.AppSystemInfoRepository
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.appSystemInfo.AppSystemInfoRepositoryImpl
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.category.CategoryRepository
@@ -10,9 +11,12 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskReposit
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskRepositoryImpl
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskScheduleRepository
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskScheduleRepositoryImpl
+import com.example.compoundeffectV1_01.data.workManager.ReminderScheduler
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
@@ -45,6 +49,11 @@ abstract class RepositoryModule {
     abstract fun bindTaskReminderRepository (
         impl: TaskReminderRepositoryImpl
     ): TaskReminderRepository
+
+
+
+
+
 
 
 }

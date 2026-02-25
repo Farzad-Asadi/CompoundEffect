@@ -5,8 +5,11 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.appDataBase.AppDatabase
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.appSystemInfo.SystemDao
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.category.CategoryDao
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.reminder.TaskReminderDao
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.reminder.TaskReminderRepository
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskDao
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskScheduleDao
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.TaskScheduleRepository
+import com.example.compoundeffectV1_01.data.workManager.ReminderScheduler
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -34,6 +37,18 @@ object DatabaseModule {
     @Provides fun provideTaskReminderDao(db: AppDatabase): TaskReminderDao = db.taskReminderDao()
     @Provides fun provideSystemDao(db: AppDatabase): SystemDao = db.systemDao()
 
+
+
+
+    //Others
+
+    @Provides
+    @Singleton
+    fun provideReminderScheduler(
+        @ApplicationContext context: Context,
+        reminderRepo: TaskReminderRepository,
+        scheduleRepo: TaskScheduleRepository,
+    ): ReminderScheduler = ReminderScheduler(context, reminderRepo, scheduleRepo)
 
 
 }

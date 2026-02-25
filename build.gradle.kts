@@ -14,13 +14,13 @@ buildscript {
     }
 }
 plugins {
-//    id("com.android.application") version "8.0.2" apply false
-//    id("com.android.library") version "8.0.2" apply false
-//    id("org.jetbrains.kotlin.android") version "1.8.21" apply false
-
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.jetbrains.kotlin.android) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.com.google.devtools.ksp) apply false
+    alias(libs.plugins.hilt) apply false
 }
+
 
 
 subprojects {

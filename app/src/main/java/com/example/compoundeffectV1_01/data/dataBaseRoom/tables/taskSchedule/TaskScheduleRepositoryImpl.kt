@@ -51,6 +51,10 @@ class TaskScheduleRepositoryImpl @Inject constructor(
     override suspend fun countByTaskId(taskId: Int): Int =
             dao.countByTaskId(taskId)
 
+    override suspend fun getById(id: Int): TaskSchedule? =
+        dao.getById(id)
+
+
     override suspend fun setSchedulePalletState(scheduleId: Int, inPallet: Boolean) =
         dao.setSchedulePalletState(scheduleId, inPallet)
 

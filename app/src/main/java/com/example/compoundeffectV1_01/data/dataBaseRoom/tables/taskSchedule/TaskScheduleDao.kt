@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import com.example.compoundeffectV1_01.ui.scheduleScreen.ScheduleItemsRow
 import kotlinx.coroutines.flow.Flow
@@ -15,8 +16,16 @@ interface TaskScheduleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(schedule: TaskSchedule)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAndReturnId(schedule: TaskSchedule):Long
+    @Transaction
+    suspend fun upsertAndReturnId(schedule: TaskSchedule): Int {
+        val id = schedule.id
+        return if (id == null) {
+            insert(schedule).toInt()
+        } else {
+            update(schedule)     // ✅ این دیگه delete نمی‌کنه
+            id
+        }
+    }
 
 
     @Query("DELETE FROM task_schedule WHERE taskId = :taskId")
@@ -27,6 +36,7 @@ interface TaskScheduleDao {
 
     @Query("SELECT * FROM task_schedule WHERE taskId = :taskId LIMIT 1")
     suspend fun getByTaskId(taskId: Int): TaskSchedule?
+
 
 
 
