@@ -173,6 +173,7 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.Tas
 import com.example.compoundeffectV1_01.data.notification.rememberPostNotificationsPermissionRequester
 import com.example.compoundeffectV1_01.data.sharedViewModel.MainSharedViewModel
 import com.example.compoundeffectV1_01.ui.navigation.AppGraphRoutes
+import com.example.compoundeffectV1_01.ui.navigation.AppRoutes
 import com.example.compoundeffectV1_01.utils.DimmedDialog
 import com.example.compoundeffectV1_01.utils.IconOption
 import com.example.compoundeffectV1_01.utils.buildColorOptions
@@ -653,12 +654,12 @@ fun CategoryScreen(
             },
             tasksRenderList = state.taskRenderItems,
             onAddTask = {
-                viewModel.startAddTask(menuCategory.categoryId!!)
-                showTaskDialog = true
+                // رفتن به TaskScreen در حالت Add برای همین دسته
+                navController.navigate(AppRoutes.taskAdd(menuCategory.categoryId!!))
             },
             onClickTask = { taskId ->
-                viewModel.startEditTask(taskId)
-                showTaskDialog = true
+                // رفتن به TaskScreen در حالت Edit
+                navController.navigate(AppRoutes.taskEdit(taskId))
             },
             scheduledCount = scheduledCount,
             sheetMode = sheetMode,

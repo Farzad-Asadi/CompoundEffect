@@ -7,8 +7,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import androidx.navigation.navigation
 import com.example.compoundeffectV1_01.ui.categoryScreen.CategoryScreen
 import com.example.compoundeffectV1_01.ui.scheduleScreen.ScheduleScreen
@@ -36,8 +38,22 @@ fun AppNavGraph(
             composable(AppRoutes.SCHEDULE) {
                 ScheduleScreen()
             }
-            composable(AppRoutes.TASK) {
-                TaskScreen()
+            composable(
+                route = AppRoutes.TASK_ROUTE,
+                arguments = listOf(
+                    navArgument(AppRoutes.ARG_CATEGORY_ID) {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    },
+                    navArgument(AppRoutes.ARG_TASK_ID) {
+                        type = NavType.IntType
+                        defaultValue = -1
+                    }
+                )
+            ) {
+                TaskScreen(
+                    onClickBack = { navController.popBackStack() }
+                )
             }
         }
     }
@@ -55,6 +71,18 @@ object AppRoutes {
     const val CATEGORY = "category"
     const val SCHEDULE = "schedule"
     const val TASK = "task"
+
+    const val ARG_CATEGORY_ID = "categoryId"
+    const val ARG_TASK_ID = "taskId"
+
+    // route template
+    const val TASK_ROUTE = "task?$ARG_CATEGORY_ID={$ARG_CATEGORY_ID}&$ARG_TASK_ID={$ARG_TASK_ID}"
+
+    fun taskAdd(categoryId: Int): String =
+        "task?$ARG_CATEGORY_ID=$categoryId&$ARG_TASK_ID=-1"
+
+    fun taskEdit(taskId: Int): String =
+        "task?$ARG_CATEGORY_ID=-1&$ARG_TASK_ID=$taskId"
 }
 
 object AppGraphRoutes {
