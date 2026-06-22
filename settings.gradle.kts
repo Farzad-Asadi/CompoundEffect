@@ -3,6 +3,7 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+//        maven { url = uri("https://maven.myket.ir") }
         maven { url = uri("https://jitpack.io") }
     }
 }
@@ -15,6 +16,7 @@ dependencyResolutionManagement {
         mavenCentral()
 
         // ✅ برای کتابخونه‌ها (Dependency ها)
+//        maven { url = uri("https://maven.myket.ir") }
         maven { url = uri("https://jitpack.io") }
     }
 }

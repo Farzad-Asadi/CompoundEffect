@@ -12,7 +12,24 @@ buildscript {
     configurations.getByName("classpath").resolutionStrategy {
         force("com.squareup:javapoet:1.13.0")
     }
+
+//    repositories {
+//        maven { url = uri("https://maven.myket.ir") }
+//    }
+
+
+
+
 }
+
+//allprojects {
+//    repositories {
+//        maven { url = uri("https://maven.myket.ir") }
+//    }
+//}
+
+
+
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.jetbrains.kotlin.android) apply false
