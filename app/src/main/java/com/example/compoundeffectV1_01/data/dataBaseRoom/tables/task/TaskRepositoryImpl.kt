@@ -79,5 +79,8 @@ class TaskRepositoryImpl @Inject constructor(
     override suspend fun deleteAllInCategory(categoryId: Int) =
         taskDao.deleteAllInCategory(categoryId)
 
+    override suspend fun incrementPomodoroDoneUnits(taskId: Int) =
+        taskDao.incrementPomodoroDoneUnits(taskId)
+
 
 }

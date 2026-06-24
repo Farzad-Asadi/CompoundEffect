@@ -58,4 +58,5 @@ interface TaskRepository {
 
     suspend fun deleteAllInCategory(categoryId: Int)
 
+    suspend fun incrementPomodoroDoneUnits(taskId: Int)
 }

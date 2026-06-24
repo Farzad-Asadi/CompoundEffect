@@ -11,6 +11,11 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -58,6 +63,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -1144,10 +1150,10 @@ fun ScheduleScreen(
             runningPomodoro?.let { running ->
                 RunningPomodoroPanel(
                     state = running,
-                    onPause = {},
-                    onResume = {},
-                    onSkip = {},
-                    onRestart = {}
+                    onPause = { viewModel.pauseRunningPomodoro() },
+                    onResume = { viewModel.resumeRunningPomodoro() },
+                    onSkip = { viewModel.skipRunningPomodoro() },
+                    onRestart = { viewModel.restartRunningPomodoro() }
                 )
             }
 
@@ -2232,14 +2238,20 @@ private fun PomodoroPalletCard(
 ) {
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    Box(
+    val progress = remember(item.expectedToday, item.scheduledToday) {
+        if (item.expectedToday <= 0) 0f
+        else (item.scheduledToday.toFloat() / item.expectedToday.toFloat())
+            .coerceIn(0f, 1f)
+    }
+
+    val pomoColor = scheduleModeColor(ScheduleMode.POMODORO)
+    val shape = RoundedCornerShape(18.dp)
+
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(102.dp) // ✅ بلندتر از کارت‌های معمولی
+            .height(102.dp)
             .padding(vertical = 6.dp)
-            .background(
-                scheduleModeColor(ScheduleMode.POMODORO)
-            )
             .onGloballyPositioned { coords = it }
             .pointerInput(item.taskId) {
                 detectDragGesturesAfterLongPress(
@@ -2255,31 +2267,80 @@ private fun PomodoroPalletCard(
                     onDragEnd = onDragEnd,
                     onDragCancel = onDragCancel
                 )
-            }
-            .padding(10.dp)
+            },
+        shape = shape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+        )
     ) {
-        Column(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(item.taskName, maxLines = 1, style = MaterialTheme.typography.labelLarge)
-                    Text("Pomodoro", maxLines = 1, style = MaterialTheme.typography.labelSmall)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(shape)
+        ) {
+            // رنگ پایه کارت
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(pomoColor.copy(alpha = 0.18f))
+            )
+
+            // مقدار انجام‌شده امروز بر اساس E/D
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(progress)
+                    .background(pomoColor.copy(alpha = 0.55f))
+                    .align(Alignment.CenterStart)
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            item.taskName,
+                            maxLines = 1,
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Text(
+                            "Pomodoro",
+                            maxLines = 1,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+
+                    Text(
+                        "T/D : ${item.totalTarget}/${item.totalDone.toString().padStart(2, '0')}",
+                        style = MaterialTheme.typography.labelMedium
+                    )
                 }
 
-                Text(
-                    "T/D : ${item.totalTarget}/${item.totalDone.toString().padStart(2, '0')}",
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
+                Spacer(Modifier.height(6.dp))
 
-            Spacer(Modifier.height(6.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "E/D : ${item.expectedToday}/${item.scheduledToday.toString().padStart(2, '0')}",
+                        style = MaterialTheme.typography.labelMedium
+                    )
 
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "E/D : ${item.expectedToday}/${
-                        item.scheduledToday.toString().padStart(2, '0')
-                    }",
-                    style = MaterialTheme.typography.labelMedium
-                )
+                    Spacer(Modifier.weight(1f))
+
+                    Text(
+                        "${(progress * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         }
     }
@@ -2296,14 +2357,13 @@ private fun PalletTaskItem(
 ) {
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    Box(
+    val shape = RoundedCornerShape(16.dp)
+
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
-            .background(
-                scheduleModeColor(item.mode)
-            )
-            .onGloballyPositioned { coords = it } // ✅ همین نود (هم‌سطح pointerInput)
+            .onGloballyPositioned { coords = it }
             .pointerInput(item.scheduleId) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { downPos ->
@@ -2318,10 +2378,18 @@ private fun PalletTaskItem(
                     onDragEnd = onDragEnd,
                     onDragCancel = onDragCancel
                 )
-            }
-            .padding(10.dp)
+            },
+        shape = shape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = scheduleModeColor(item.mode).copy(alpha = 0.45f)
+        )
     ) {
-        Text(item.title, maxLines = 1)
+        Text(
+            text = item.title,
+            maxLines = 1,
+            modifier = Modifier.padding(10.dp)
+        )
     }
 }
 
@@ -2721,6 +2789,27 @@ private fun RunningPomodoroPanel(
     onSkip: () -> Unit,
     onRestart: () -> Unit
 ) {
+    val resumePulse by rememberInfiniteTransition(label = "resume_pulse")
+        .animateFloat(
+            initialValue = 1f,
+            targetValue = if (state.isPaused) 1.25f else 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 550),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "resume_pulse_scale"
+        )
+
+    val resumeAlpha by rememberInfiniteTransition(label = "resume_alpha")
+        .animateFloat(
+            initialValue = 0.15f,
+            targetValue = if (state.isPaused) 0.65f else 0.15f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 550),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "resume_pulse_alpha"
+        )
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -2735,6 +2824,8 @@ private fun RunningPomodoroPanel(
 
         ) {
             Text(state.title, style = MaterialTheme.typography.titleMedium)
+
+
 
             Text(
                 text = "انتظار تا شروع: ${formatSeconds(state.waitingSeconds)}",
@@ -2754,20 +2845,57 @@ private fun RunningPomodoroPanel(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButton(onClick = onPause) {
+                IconButton(
+                    onClick = onPause,
+                    enabled = !state.isPaused && state.phase != PomodoroRunPhase.FINISHED
+                ) {
                     Icon(Icons.Filled.Pause, contentDescription = "Pause")
                 }
 
-                IconButton(onClick = onResume) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = "Resume")
+                IconButton(
+                    onClick = onResume,
+                    enabled = state.isPaused,
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = if (state.isPaused) resumePulse else 1f
+                            scaleY = if (state.isPaused) resumePulse else 1f
+                        }
+                        .background(
+                            color = if (state.isPaused)
+                                MaterialTheme.colorScheme.primary.copy(alpha = resumeAlpha)
+                            else
+                                Color.Transparent,
+                            shape = CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Resume",
+                        tint = if (state.isPaused)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    )
                 }
 
-                IconButton(onClick = onSkip) {
-                    Icon(Icons.Filled.Close, contentDescription = "Skip")
+                IconButton(
+                    onClick = onSkip,
+                    enabled = state.phase != PomodoroRunPhase.FINISHED
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.SkipNext,
+                        contentDescription = "Skip"
+                    )
                 }
 
-                IconButton(onClick = onRestart) {
-                    Icon(Icons.Filled.Refresh, contentDescription = "Restart")
+                IconButton(
+                    onClick = onRestart,
+                    enabled = state.phase != PomodoroRunPhase.FINISHED
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Restart"
+                    )
                 }
             }
         }

@@ -21,6 +21,13 @@ class PomodoroAlarmScheduler @Inject constructor(
     private val context: Context
 ) : PomodoroScheduler {
 
+    private val activeRequestCodes = mutableSetOf<Int>()
+
+    private fun pomodoroIntent(): Intent {
+        return Intent(context, PomodoroAlarmReceiver::class.java).apply {
+            action = "com.example.compoundeffect.POMODORO_ALARM"
+        }
+    }
 
     @SuppressLint("ScheduleExactAlarm")
     override fun schedule(type: String, triggerAtMillis: Long) {
@@ -38,9 +45,7 @@ class PomodoroAlarmScheduler @Inject constructor(
 
 
 
-        val intent = Intent(context, PomodoroAlarmReceiver::class.java).apply {
-            action = "com.example.compoundeffect.POMODORO_ALARM"
-        }
+        val intent = pomodoroIntent()
 
         val requestCode = (triggerAtMillis % Int.MAX_VALUE).toInt()
 
@@ -50,6 +55,7 @@ class PomodoroAlarmScheduler @Inject constructor(
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        activeRequestCodes += requestCode
 
         Log.e("ALARM_DEBUG", "⏰ set alarm at=$triggerAtMillis")
 
@@ -61,7 +67,25 @@ class PomodoroAlarmScheduler @Inject constructor(
     }
 
     override fun cancelAll() {
-        // cancel alarms
+        val alarmManager = context.getSystemService(AlarmManager::class.java)
+
+        activeRequestCodes.forEach { requestCode ->
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                requestCode,
+                pomodoroIntent(),
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            if (pendingIntent != null) {
+                alarmManager.cancel(pendingIntent)
+                pendingIntent.cancel()
+            }
+        }
+
+        Log.e("ALARM_DEBUG", "🛑 cancelAll pomodoro alarms count=${activeRequestCodes.size}")
+
+        activeRequestCodes.clear()
     }
 
 

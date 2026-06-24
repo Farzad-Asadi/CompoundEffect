@@ -137,4 +137,10 @@ interface TaskDao {
     suspend fun deleteAllInCategory(categoryId: Int)
 
 
+    @Query("""
+    UPDATE task
+    SET pomodoroDoneUnits = pomodoroDoneUnits + 1
+    WHERE id = :taskId
+""")
+    suspend fun incrementPomodoroDoneUnits(taskId: Int)
 }
