@@ -187,6 +187,9 @@ class TaskScreenViewModel @Inject constructor(
     private val _editingTaskId = MutableStateFlow<Int?>(null)
     val editingTaskId = _editingTaskId.asStateFlow()
 
+    private val _taskEditBackStack = MutableStateFlow<List<Int>>(emptyList())
+    val taskEditBackStack = _taskEditBackStack.asStateFlow()
+
     private val _scheduleDraft = MutableStateFlow(ScheduleDraft())
     val scheduleDraft = _scheduleDraft.asStateFlow()
 
@@ -370,7 +373,8 @@ class TaskScreenViewModel @Inject constructor(
 
     //تسک ها
     private fun startAddTask(categoryId: Int) {
-        _editingTaskId.value = null   // ✅ اضافه کن
+        _editingTaskId.value = null
+        _taskEditBackStack.value = emptyList()
         _taskDraft.value = TaskDraft(categoryId = categoryId)
         _scheduleDraft.value = ScheduleDraft()
         _scheduleConfirmedForNewTask.value = false
@@ -718,6 +722,32 @@ class TaskScreenViewModel @Inject constructor(
 
         dfs(rootParentId, realDepth = 1, ancestorCollapsed = false)
         return items
+    }
+
+    fun openChildTaskForEdit(childTaskId: Int) {
+        val currentTaskId = _editingTaskId.value ?: return
+        if (currentTaskId == childTaskId) return
+
+        _taskEditBackStack.update { stack ->
+            stack + currentTaskId
+        }
+
+        startEditTask(childTaskId)
+    }
+
+    fun navigateBackInsideTaskEditor(): Boolean {
+        val stack = _taskEditBackStack.value
+        val previousTaskId = stack.lastOrNull() ?: return false
+
+        _taskEditBackStack.value = stack.dropLast(1)
+
+        startEditTask(previousTaskId)
+
+        return true
+    }
+
+    fun clearTaskEditBackStack() {
+        _taskEditBackStack.value = emptyList()
     }
 
 

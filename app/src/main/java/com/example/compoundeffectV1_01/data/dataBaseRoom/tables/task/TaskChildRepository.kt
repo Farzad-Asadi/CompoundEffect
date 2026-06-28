@@ -97,4 +97,29 @@ interface TaskChildRepository {
         parentRuleScheduleId: Int?,
         occurrenceDateEpochDay: Long
     )
+
+    fun observeRequirementUiByScheduleOccurrence(
+        scheduleId: Int,
+        occurrenceDateEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>>
+
+    fun observeRequirementUiByRuleOccurrence(
+        parentRuleScheduleId: Int,
+        occurrenceDateEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>>
+
+    suspend fun toggleRequirementCompletedById(
+        requirementId: Int,
+        completed: Boolean
+    )
+
+    fun observeRequirementSummariesByDateRange(
+        startEpochDay: Long,
+        endEpochDay: Long
+    ): Flow<List<TaskChildRequirementSummaryUi>>
+
+    fun observeRequirementUiByDateRange(
+        startEpochDay: Long,
+        endEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>>
 }

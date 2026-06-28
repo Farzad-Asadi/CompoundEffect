@@ -461,4 +461,193 @@ interface TaskChildDao {
             }
         }
     }
+
+    @Query("""
+    SELECT 
+        r.id AS requirementId,
+        r.ruleId AS ruleId,
+        r.parentTaskId AS parentTaskId,
+        r.childTaskId AS childTaskId,
+
+        t.name AS childTitle,
+        t.color AS childColor,
+
+        r.contextType AS contextType,
+
+        r.scheduleId AS scheduleId,
+        r.parentRuleScheduleId AS parentRuleScheduleId,
+        r.occurrenceDateEpochDay AS occurrenceDateEpochDay,
+        r.listSessionId AS listSessionId,
+
+        r.slotIndex AS slotIndex,
+        r.learningIndex AS learningIndex,
+        r.learningTargetCount AS learningTargetCount,
+
+        r.status AS status,
+
+        r.dueAtEpochMillis AS dueAtEpochMillis,
+        r.expiresAtEpochMillis AS expiresAtEpochMillis,
+        r.completedAtEpochMillis AS completedAtEpochMillis,
+
+        r.sourceCatalogItemId AS sourceCatalogItemId
+    FROM task_child_requirement r
+    INNER JOIN task t ON t.id = r.childTaskId
+    WHERE r.scheduleId = :scheduleId
+      AND r.occurrenceDateEpochDay = :occurrenceDateEpochDay
+    ORDER BY 
+    t.siblingIndex ASC,
+    t.id ASC,
+    r.slotIndex ASC,
+    r.learningIndex ASC,
+    r.id ASC
+""")
+    fun observeRequirementUiByScheduleOccurrence(
+        scheduleId: Int,
+        occurrenceDateEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>>
+
+    @Query("""
+    SELECT 
+        r.id AS requirementId,
+        r.ruleId AS ruleId,
+        r.parentTaskId AS parentTaskId,
+        r.childTaskId AS childTaskId,
+
+        t.name AS childTitle,
+        t.color AS childColor,
+
+        r.contextType AS contextType,
+
+        r.scheduleId AS scheduleId,
+        r.parentRuleScheduleId AS parentRuleScheduleId,
+        r.occurrenceDateEpochDay AS occurrenceDateEpochDay,
+        r.listSessionId AS listSessionId,
+
+        r.slotIndex AS slotIndex,
+        r.learningIndex AS learningIndex,
+        r.learningTargetCount AS learningTargetCount,
+
+        r.status AS status,
+
+        r.dueAtEpochMillis AS dueAtEpochMillis,
+        r.expiresAtEpochMillis AS expiresAtEpochMillis,
+        r.completedAtEpochMillis AS completedAtEpochMillis,
+
+        r.sourceCatalogItemId AS sourceCatalogItemId
+    FROM task_child_requirement r
+    INNER JOIN task t ON t.id = r.childTaskId
+    WHERE r.parentRuleScheduleId = :parentRuleScheduleId
+      AND r.occurrenceDateEpochDay = :occurrenceDateEpochDay
+    ORDER BY 
+    t.siblingIndex ASC,
+    t.id ASC,
+    r.slotIndex ASC,
+    r.learningIndex ASC,
+    r.id ASC
+""")
+    fun observeRequirementUiByRuleOccurrence(
+        parentRuleScheduleId: Int,
+        occurrenceDateEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>>
+
+    @Query("""
+    SELECT * FROM task_child_requirement
+    WHERE id = :requirementId
+    LIMIT 1
+""")
+    suspend fun getRequirementById(
+        requirementId: Int
+    ): TaskChildRequirementEntity?
+
+    @Transaction
+    suspend fun toggleRequirementCompletedById(
+        requirementId: Int,
+        completed: Boolean
+    ) {
+        val requirement = getRequirementById(requirementId) ?: return
+
+        toggleRequirementCompleted(
+            requirement = requirement,
+            completed = completed
+        )
+    }
+
+
+    @Query("""
+    SELECT
+        parentTaskId AS parentTaskId,
+        scheduleId AS scheduleId,
+        parentRuleScheduleId AS parentRuleScheduleId,
+        occurrenceDateEpochDay AS occurrenceDateEpochDay,
+
+        COUNT(*) AS totalCount,
+
+        SUM(
+            CASE 
+                WHEN status = 'COMPLETE' THEN 1 
+                ELSE 0 
+            END
+        ) AS completedCount
+
+    FROM task_child_requirement
+    WHERE occurrenceDateEpochDay BETWEEN :startEpochDay AND :endEpochDay
+      AND status != 'CANCELLED'
+    GROUP BY 
+        parentTaskId,
+        scheduleId,
+        parentRuleScheduleId,
+        occurrenceDateEpochDay
+""")
+    fun observeRequirementSummariesByDateRange(
+        startEpochDay: Long,
+        endEpochDay: Long
+    ): Flow<List<TaskChildRequirementSummaryUi>>
+
+    @Query("""
+    SELECT 
+        r.id AS requirementId,
+        r.ruleId AS ruleId,
+        r.parentTaskId AS parentTaskId,
+        r.childTaskId AS childTaskId,
+
+        t.name AS childTitle,
+        t.color AS childColor,
+
+        r.contextType AS contextType,
+
+        r.scheduleId AS scheduleId,
+        r.parentRuleScheduleId AS parentRuleScheduleId,
+        r.occurrenceDateEpochDay AS occurrenceDateEpochDay,
+        r.listSessionId AS listSessionId,
+
+        r.slotIndex AS slotIndex,
+        r.learningIndex AS learningIndex,
+        r.learningTargetCount AS learningTargetCount,
+
+        r.status AS status,
+
+        r.dueAtEpochMillis AS dueAtEpochMillis,
+        r.expiresAtEpochMillis AS expiresAtEpochMillis,
+        r.completedAtEpochMillis AS completedAtEpochMillis,
+
+        r.sourceCatalogItemId AS sourceCatalogItemId
+    FROM task_child_requirement r
+    INNER JOIN task t ON t.id = r.childTaskId
+    WHERE r.occurrenceDateEpochDay BETWEEN :startEpochDay AND :endEpochDay
+      AND r.status != 'CANCELLED'
+    ORDER BY 
+        r.parentTaskId ASC,
+        r.scheduleId ASC,
+        r.parentRuleScheduleId ASC,
+        r.occurrenceDateEpochDay ASC,
+        t.siblingIndex ASC,
+        t.id ASC,
+        r.slotIndex ASC,
+        r.learningIndex ASC,
+        r.id ASC
+""")
+    fun observeRequirementUiByDateRange(
+        startEpochDay: Long,
+        endEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>>
 }

@@ -8,6 +8,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.compoundeffectV1_01.data.alarm.PomodoroAlarmReceiver
 import com.example.compoundeffectV1_01.data.alarm.PomodoroAlarmScheduler
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.reminder.TaskReminderRepository
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRepository
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementSummaryUi
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementUi
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskMode
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskRepository
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.RepeatUnit
@@ -18,12 +21,15 @@ import com.example.compoundeffectV1_01.data.dataStore.AppPreferences
 import com.example.compoundeffectV1_01.data.workManager.ReminderScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -35,11 +41,11 @@ import java.time.ZoneId
 import javax.inject.Inject
 
 
-private val MIN_GAP_MIN = 5
 
 @HiltViewModel
 class ScheduleScreenViewModel @Inject constructor(
     private val taskRepo: TaskRepository,
+    private val taskChildRepo: TaskChildRepository,
     private val taskScheduleRepo: TaskScheduleRepository,
     private val reminderScheduler: ReminderScheduler,
     private val reminderRepo: TaskReminderRepository,
@@ -73,7 +79,7 @@ class ScheduleScreenViewModel @Inject constructor(
     private val _runningPomodoro = MutableStateFlow<RunningPomodoroUiState?>(null)
     val runningPomodoro = _runningPomodoro.asStateFlow()
 
-
+    private var lastEnsuredTaskChildOccurrenceKeys: Set<String> = emptySet()
 
     val allItems: StateFlow<List<ScheduleScreenItem>> =
         taskScheduleRepo.observeAllSchedulesWithTask()
@@ -132,9 +138,233 @@ class ScheduleScreenViewModel @Inject constructor(
                 emptyList()
             )
 
+    private val _taskChildSheetState = MutableStateFlow<TaskChildSheetState?>(null)
+    val taskChildSheetState = _taskChildSheetState.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val taskChildSheetRequirements: StateFlow<List<TaskChildRequirementUi>> =
+        _taskChildSheetState
+            .flatMapLatest { state ->
+                when {
+                    state == null -> flowOf(emptyList())
+
+                    state.scheduleId != null ->
+                        taskChildRepo.observeRequirementUiByScheduleOccurrence(
+                            scheduleId = state.scheduleId,
+                            occurrenceDateEpochDay = state.occurrenceDateEpochDay
+                        )
+
+                    state.parentRuleScheduleId != null ->
+                        taskChildRepo.observeRequirementUiByRuleOccurrence(
+                            parentRuleScheduleId = state.parentRuleScheduleId,
+                            occurrenceDateEpochDay = state.occurrenceDateEpochDay
+                        )
+
+                    else -> flowOf(emptyList())
+                }
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                emptyList()
+            )
+
+    private val _taskChildVisibleRange =
+        MutableStateFlow<TaskChildVisibleRange?>(null)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val taskChildRequirementSummaries: StateFlow<List<TaskChildRequirementSummaryUi>> =
+        _taskChildVisibleRange
+            .flatMapLatest { range ->
+                if (range == null) {
+                    flowOf(emptyList())
+                } else {
+                    taskChildRepo.observeRequirementSummariesByDateRange(
+                        startEpochDay = range.startEpochDay,
+                        endEpochDay = range.endEpochDay
+                    )
+                }
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                emptyList()
+            )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val taskChildRequirementPreviews: StateFlow<List<TaskChildRequirementUi>> =
+        _taskChildVisibleRange
+            .flatMapLatest { range ->
+                if (range == null) {
+                    flowOf(emptyList())
+                } else {
+                    taskChildRepo.observeRequirementUiByDateRange(
+                        startEpochDay = range.startEpochDay,
+                        endEpochDay = range.endEpochDay
+                    )
+                }
+            }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                emptyList()
+            )
 
     init {
         startPomodoroAutoWatcher()
+        startTaskChildRequirementAutoGenerator()
+    }
+
+    private fun startTaskChildRequirementAutoGenerator() {
+        viewModelScope.launch {
+            allItems.collect { items ->
+
+                val occurrenceInputs = items
+                    .asSequence()
+                    .filter { !it.inPallet }
+                    .mapNotNull { item ->
+                        val parentTaskId = item.taskId
+
+                        val realScheduleId = item.scheduleId
+                            .takeIf { it > 0 }
+
+                        val virtualParentRuleScheduleId =
+                            if (realScheduleId == null) {
+                                item.parentRuleScheduleId
+                            } else {
+                                null
+                            }
+
+                        if (realScheduleId == null && virtualParentRuleScheduleId == null) {
+                            return@mapNotNull null
+                        }
+
+                        val occurrenceDateEpochDay =
+                            item.occurrenceDateEpochDay
+                                ?: item.dateEpochDay
+                                ?: item.start.toLocalDate().toEpochDay()
+
+                        TaskChildOccurrenceEnsureInput(
+                            parentTaskId = parentTaskId,
+                            scheduleId = realScheduleId,
+                            parentRuleScheduleId = virtualParentRuleScheduleId,
+                            occurrenceDateEpochDay = occurrenceDateEpochDay
+                        )
+                    }
+                    .distinctBy {
+                        "${it.parentTaskId}|${it.scheduleId}|${it.parentRuleScheduleId}|${it.occurrenceDateEpochDay}"
+                    }
+                    .toList()
+
+                val currentKeys = occurrenceInputs
+                    .map {
+                        "${it.parentTaskId}|${it.scheduleId}|${it.parentRuleScheduleId}|${it.occurrenceDateEpochDay}"
+                    }
+                    .toSet()
+
+                if (currentKeys == lastEnsuredTaskChildOccurrenceKeys) {
+                    return@collect
+                }
+
+                lastEnsuredTaskChildOccurrenceKeys = currentKeys
+
+                withContext(Dispatchers.IO) {
+                    occurrenceInputs.forEach { input ->
+                        taskChildRepo.ensureRequirementsForParentOccurrence(
+                            parentTaskId = input.parentTaskId,
+                            scheduleId = input.scheduleId,
+                            parentRuleScheduleId = input.parentRuleScheduleId,
+                            occurrenceDateEpochDay = input.occurrenceDateEpochDay
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun openTaskChildSheet(item: ScheduleScreenItem) {
+        val state = buildTaskChildSheetState(item) ?: return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            taskChildRepo.ensureRequirementsForParentOccurrence(
+                parentTaskId = state.parentTaskId,
+                scheduleId = state.scheduleId,
+                parentRuleScheduleId = state.parentRuleScheduleId,
+                occurrenceDateEpochDay = state.occurrenceDateEpochDay
+            )
+
+            _taskChildSheetState.value = state
+        }
+    }
+
+    fun closeTaskChildSheet() {
+        _taskChildSheetState.value = null
+    }
+
+    fun toggleTaskChildRequirementCompleted(
+        requirementId: Int,
+        completed: Boolean
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            taskChildRepo.toggleRequirementCompletedById(
+                requirementId = requirementId,
+                completed = completed
+            )
+        }
+    }
+
+    fun setTaskChildVisibleRange(
+        startEpochDay: Long,
+        endEpochDay: Long
+    ) {
+        val newRange = TaskChildVisibleRange(
+            startEpochDay = startEpochDay,
+            endEpochDay = endEpochDay
+        )
+
+        if (_taskChildVisibleRange.value == newRange) return
+
+        _taskChildVisibleRange.value = newRange
+    }
+
+    private fun buildTaskChildSheetState(
+        item: ScheduleScreenItem
+    ): TaskChildSheetState? {
+        val occurrenceDateEpochDay =
+            item.occurrenceDateEpochDay
+                ?: item.dateEpochDay
+                ?: item.start.toLocalDate().toEpochDay()
+
+        val isVirtualOccurrence =
+            item.parentRuleScheduleId != null &&
+                    item.occurrenceDateEpochDay != null &&
+                    (item.scheduleId < 0 || item.scheduleId == item.parentRuleScheduleId)
+
+        val realScheduleId =
+            if (!isVirtualOccurrence && item.scheduleId > 0) {
+                item.scheduleId
+            } else {
+                null
+            }
+
+        val ruleScheduleId =
+            if (realScheduleId == null) {
+                item.parentRuleScheduleId
+            } else {
+                null
+            }
+
+        if (realScheduleId == null && ruleScheduleId == null) {
+            return null
+        }
+
+        return TaskChildSheetState(
+            parentTaskId = item.taskId,
+            title = item.title,
+            scheduleId = realScheduleId,
+            parentRuleScheduleId = ruleScheduleId,
+            occurrenceDateEpochDay = occurrenceDateEpochDay
+        )
     }
 
 
@@ -1323,6 +1553,7 @@ data class PomodoroPalletCardItem(
 
     val remainingToday: Int
 )
+
 data class PomodoroAdjustState(
     val taskId: Int,
     val scheduleId: Int,
@@ -1334,8 +1565,6 @@ data class PomodoroAdjustState(
     val anchorInRoot: Offset, // محل نمایش stepper
     val maxAllowed: Int // remainingToday از پالت
 )
-
-
 
 data class RunningPomodoroUiState(
     val scheduleId: Int,
@@ -1354,7 +1583,25 @@ data class RunningPomodoroUiState(
     val pauseAt: LocalDateTime? = null
 )
 
+private data class TaskChildOccurrenceEnsureInput(
+    val parentTaskId: Int,
+    val scheduleId: Int?,
+    val parentRuleScheduleId: Int?,
+    val occurrenceDateEpochDay: Long
+)
 
+data class TaskChildSheetState(
+    val parentTaskId: Int,
+    val title: String,
+    val scheduleId: Int?,
+    val parentRuleScheduleId: Int?,
+    val occurrenceDateEpochDay: Long
+)
+
+private data class TaskChildVisibleRange(
+    val startEpochDay: Long,
+    val endEpochDay: Long
+)
 
 
 enum class PomodoroRunPhase {

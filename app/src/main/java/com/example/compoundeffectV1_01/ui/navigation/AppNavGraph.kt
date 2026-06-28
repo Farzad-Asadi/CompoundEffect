@@ -55,7 +55,10 @@ fun AppNavGraph(
                 )
             ) {
                 TaskScreen(
-                    onClickBack = { navController.popBackStack() }
+                    onClickBack = { navController.popBackStack() },
+                    onOpenTask = { taskId ->
+                        navController.navigate(AppRoutes.taskEdit(taskId))
+                    }
                 )
             }
             composable(AppRoutes.BACKUP_RESTORE) {

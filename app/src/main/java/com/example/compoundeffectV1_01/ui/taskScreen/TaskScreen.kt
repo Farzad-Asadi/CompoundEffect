@@ -37,6 +37,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Note
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Anchor
 import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -52,6 +53,8 @@ import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.GolfCourse
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pattern
@@ -125,6 +128,7 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.reminder.Reminde
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.reminder.ReminderStrengthMode
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.reminder.StartEnd
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.reminder.TaskReminderEntity
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskEntity
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskMode
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.RepeatUnit
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.taskSchedule.ScheduleMode
@@ -138,6 +142,7 @@ import com.example.compoundeffectV1_01.data.dataClasses.TaskScheduleUi
 import com.example.compoundeffectV1_01.data.notification.rememberPostNotificationsPermissionRequester
 
 import com.example.compoundeffectV1_01.ui.categoryScreen.ConfirmAction
+import com.example.compoundeffectV1_01.ui.categoryScreen.ROOT
 import com.example.compoundeffectV1_01.utils.DimmedDialog
 import com.example.compoundeffectV1_01.utils.colorFromHex
 import com.example.compoundeffectV1_01.utils.durationMinutesSameDay
@@ -161,6 +166,7 @@ import kotlin.math.roundToInt
 @Composable
 fun TaskScreen(
     onClickBack: () -> Unit,
+    onOpenTask: (Int) -> Unit,
     viewModel: TaskScreenViewModel = hiltViewModel()
 ) {
 
@@ -178,6 +184,58 @@ fun TaskScreen(
     val editingReminderKey by viewModel.editingReminderKey.collectAsState()
     val requestPostNotifPermission = rememberPostNotificationsPermissionRequester()
 
+    val editingTaskEntity = remember(
+        editingTaskId,
+        state.taskEntities
+    ) {
+        val id = editingTaskId ?: return@remember null
+
+        state.taskEntities.firstOrNull { it.id == id }
+    }
+
+    val isEditingChildTask = remember(editingTaskEntity) {
+        val parentId = editingTaskEntity?.parentTaskId
+        parentId != null && parentId != ROOT
+    }
+
+    val blockedGrandChildTasksForEditingTask = remember(
+        editingTaskId,
+        state.taskEntities,
+        isEditingChildTask
+    ) {
+        val parentId = editingTaskId ?: return@remember emptyList<TaskEntity>()
+
+        if (!isEditingChildTask) {
+            emptyList()
+        } else {
+            state.taskEntities
+                .filter { it.parentTaskId == parentId }
+                .sortedWith(
+                    compareBy<TaskEntity> { it.siblingIndex }
+                        .thenBy { it.id ?: 0 }
+                )
+        }
+    }
+
+    val directChildTasksForEditingTask = remember(
+        editingTaskId,
+        state.taskEntities,
+        isEditingChildTask
+    ) {
+        val parentId = editingTaskId ?: return@remember emptyList<TaskEntity>()
+
+        if (isEditingChildTask) {
+            emptyList()
+        } else {
+            state.taskEntities
+                .filter { it.parentTaskId == parentId }
+                .sortedWith(
+                    compareBy<TaskEntity> { it.siblingIndex }
+                        .thenBy { it.id ?: 0 }
+                )
+        }
+    }
+
 
     val menuCategory = state.categories.firstOrNull { it.categoryId == menuCategoryId }
 
@@ -187,16 +245,15 @@ fun TaskScreen(
 
     // 1) Back سیستم (gesture/btn) هم مثل دکمه Back خودت رفتار کنه
     BackHandler {
-        viewModel.finishEditTask()
-        onClickBack()
-    }
+        val handledInsideEditor = viewModel.navigateBackInsideTaskEditor()
 
-    // 2) اگر کاربر به هر شکلی از این صفحه خارج شد، draft پاک بشه
-    DisposableEffect(Unit) {
-        onDispose {
+        if (!handledInsideEditor) {
             viewModel.finishEditTask()
+            viewModel.clearTaskEditBackStack()
+            onClickBack()
         }
     }
+
 
 
     Scaffold(
@@ -219,9 +276,13 @@ fun TaskScreen(
                 categoryColorHex = selectedCategory.color,
                 draft = taskDraft,
                 onClickBack = {
-                    // اگر خواستی قبل خروج draft پاک شود:
-                    viewModel.finishEditTask()
-                    onClickBack()
+                    val handledInsideEditor = viewModel.navigateBackInsideTaskEditor()
+
+                    if (!handledInsideEditor) {
+                        viewModel.finishEditTask()
+                        viewModel.clearTaskEditBackStack()
+                        onClickBack()
+                    }
                 },
                 onNameChange = viewModel::setTaskName,
                 onPriorityChange = viewModel::setTaskPriority,
@@ -282,6 +343,12 @@ fun TaskScreen(
                 onPomodoroToggle = viewModel::setTaskPomodoroEnabled,
                 onPomodoroTargetUnitsChange = viewModel::setTaskPomodoroTargetUnits,
                 onPomodoroDoneUnitsChange = viewModel::setTaskPomodoroDoneUnits,
+                childTasks = directChildTasksForEditingTask,
+                onClickChildTask = { childTaskId ->
+                    viewModel.openChildTaskForEdit(childTaskId)
+                },
+                canManageChildTasks = !isEditingChildTask,
+                blockedGrandChildTasks = blockedGrandChildTasksForEditingTask,
                 modifier = Modifier.padding(padding)
 
             )
@@ -412,6 +479,10 @@ private fun AddEditeTaskScreen(
     onPomodoroToggle: (Boolean) -> Unit,
     onPomodoroTargetUnitsChange: (Int?) -> Unit,
     onPomodoroDoneUnitsChange: (Int) -> Unit,
+    childTasks: List<TaskEntity>,
+    onClickChildTask: (Int) -> Unit,
+    canManageChildTasks: Boolean,
+    blockedGrandChildTasks: List<TaskEntity>,
     modifier: Modifier,
 
     ) {
@@ -420,6 +491,9 @@ private fun AddEditeTaskScreen(
     var pendingDeleteScheduleTitle by rememberSaveable { mutableStateOf("") }
     var showAddNote by rememberSaveable { mutableStateOf(false) }
 
+    var schedulesExpanded by rememberSaveable { mutableStateOf(false) }
+
+    var childTasksExpanded by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -620,33 +694,86 @@ private fun AddEditeTaskScreen(
             },
         )
 
-        //Schedule
+        // Schedule section
         AddEditeDialogRow(
-            onClick = onOpenSchedule,
+            onClick = {
+                if (schedules.isNotEmpty()) {
+                    schedulesExpanded = !schedulesExpanded
+                } else {
+                    onOpenSchedule()
+                }
+            },
             content = {
                 Icon(Icons.Filled.Event, contentDescription = null)
+
                 Spacer(Modifier.width(8.dp))
-                Text("Schedule this task", modifier = Modifier.weight(1f))
-            },
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Schedules",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+
+                    if (schedules.isNotEmpty()) {
+                        Text(
+                            text = "${schedules.size} schedule${if (schedules.size > 1) "s" else ""}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = "No schedule yet",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onOpenSchedule
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = "Add schedule"
+                    )
+                }
+
+                if (schedules.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            schedulesExpanded = !schedulesExpanded
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (schedulesExpanded) {
+                                Icons.Filled.KeyboardArrowUp
+                            } else {
+                                Icons.Filled.KeyboardArrowDown
+                            },
+                            contentDescription = "Expand schedules"
+                        )
+                    }
+                }
+            }
         )
 
-        //Schedule List
-        if (schedules.isNotEmpty()) {
+        if (schedules.isNotEmpty() && schedulesExpanded) {
             Column(
-                Modifier
+                modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 44.dp)
+                    .padding(start = 44.dp, end = 12.dp)
             ) {
                 schedules.forEach { ui ->
                     ScheduleRow(
                         schedule = ui.schedule,
                         onClick = { onClickSchedule(ui.key) },
                         onRequestDelete = {
-                            // ✅ فقط درخواست حذف => دیالوگ باز شود
                             pendingDeleteScheduleId = ui.key
                             pendingDeleteScheduleTitle =
                                 ui.schedule.title?.takeIf { it.isNotBlank() }
-                                    ?: taskNameForScheduleFallback(draft.name) // پایین تعریف می‌کنیم
+                                    ?: taskNameForScheduleFallback(draft.name)
                         }
                     )
 
@@ -655,6 +782,112 @@ private fun AddEditeTaskScreen(
             }
         }
 
+        // Child tasks section
+        if (canManageChildTasks) {
+            // Child tasks section
+            AddEditeDialogRow(
+                onClick = {
+                    if (childTasks.isNotEmpty()) {
+                        childTasksExpanded = !childTasksExpanded
+                    }
+                },
+                content = {
+                    Icon(Icons.Filled.SubdirectoryArrowRight, contentDescription = null)
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "Child tasks",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+
+                        if (childTasks.isNotEmpty()) {
+                            Text(
+                                text = "${childTasks.size} child${if (childTasks.size > 1) "ren" else ""}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Text(
+                                text = "No child task yet",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    if (childTasks.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                childTasksExpanded = !childTasksExpanded
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (childTasksExpanded) {
+                                    Icons.Filled.KeyboardArrowUp
+                                } else {
+                                    Icons.Filled.KeyboardArrowDown
+                                },
+                                contentDescription = "Expand child tasks"
+                            )
+                        }
+                    }
+                }
+            )
+
+            if (childTasks.isNotEmpty() && childTasksExpanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 44.dp, end = 12.dp)
+                ) {
+                    childTasks.forEach { child ->
+                        ChildTaskRow(
+                            child = child,
+                            onClick = {
+                                child.id?.let(onClickChildTask)
+                            }
+                        )
+
+                        HorizontalDivider(thickness = 0.5.dp)
+                    }
+                }
+            }
+        }
+
+        if (!canManageChildTasks && blockedGrandChildTasks.isNotEmpty()) {
+            AddEditeDialogRow(
+                onClick = null,
+                content = {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+
+                    Spacer(Modifier.width(8.dp))
+
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "Invalid child structure",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+
+                        Text(
+                            text = "This child task already has ${blockedGrandChildTasks.size} nested child task(s). Cleanup is required.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            )
+        }
 
 
 
@@ -692,6 +925,62 @@ private fun AddEditeTaskScreen(
 
     }
 
+}
+
+@Composable
+private fun ChildTaskRow(
+    child: TaskEntity,
+    onClick: () -> Unit
+) {
+    ListItem(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        leadingContent = {
+            Icon(
+                imageVector = if (child.isCompleted) {
+                    Icons.Filled.CheckCircle
+                } else {
+                    Icons.Filled.RadioButtonUnchecked
+                },
+                contentDescription = null,
+                tint = if (child.isCompleted) {
+                    Color(0xFF2E7D32)
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        },
+        headlineContent = {
+            Text(
+                text = child.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        supportingContent = {
+            Text(
+                text = if (child.taskMode == TaskMode.POMODORO) {
+                    "Pomodoro child"
+                } else {
+                    "Normal child"
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        trailingContent = {
+            Icon(
+                imageVector = Icons.Filled.ArrowForwardIos,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
+        },
+        colors = ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    )
 }
 
 

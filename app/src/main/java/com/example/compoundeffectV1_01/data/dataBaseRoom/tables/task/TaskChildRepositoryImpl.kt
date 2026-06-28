@@ -146,6 +146,49 @@ class TaskChildRepositoryImpl @Inject constructor(
             occurrenceDateEpochDay = occurrenceDateEpochDay
         )
 
+    override fun observeRequirementUiByScheduleOccurrence(
+        scheduleId: Int,
+        occurrenceDateEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>> =
+        taskChildDao.observeRequirementUiByScheduleOccurrence(
+            scheduleId = scheduleId,
+            occurrenceDateEpochDay = occurrenceDateEpochDay
+        )
 
+    override fun observeRequirementUiByRuleOccurrence(
+        parentRuleScheduleId: Int,
+        occurrenceDateEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>> =
+        taskChildDao.observeRequirementUiByRuleOccurrence(
+            parentRuleScheduleId = parentRuleScheduleId,
+            occurrenceDateEpochDay = occurrenceDateEpochDay
+        )
+
+    override suspend fun toggleRequirementCompletedById(
+        requirementId: Int,
+        completed: Boolean
+    ) =
+        taskChildDao.toggleRequirementCompletedById(
+            requirementId = requirementId,
+            completed = completed
+        )
+
+    override fun observeRequirementSummariesByDateRange(
+        startEpochDay: Long,
+        endEpochDay: Long
+    ): Flow<List<TaskChildRequirementSummaryUi>> =
+        taskChildDao.observeRequirementSummariesByDateRange(
+            startEpochDay = startEpochDay,
+            endEpochDay = endEpochDay
+        )
+
+    override fun observeRequirementUiByDateRange(
+        startEpochDay: Long,
+        endEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>> =
+        taskChildDao.observeRequirementUiByDateRange(
+            startEpochDay = startEpochDay,
+            endEpochDay = endEpochDay
+        )
 
 }

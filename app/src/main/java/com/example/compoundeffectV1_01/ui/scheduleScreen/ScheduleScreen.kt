@@ -144,12 +144,20 @@ import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementStatus
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementSummaryUi
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementUi
 import androidx.compose.material.icons.filled.Settings as SettingsIcon
 import com.example.compoundeffectV1_01.data.notification.PomodoroNotifications
 import com.example.compoundeffectV1_01.utils.colorFromHex
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleScreen(
     navController: NavHostController,
@@ -163,8 +171,41 @@ fun ScheduleScreen(
 
     val pomodoroDailyAdjustments by viewModel.pomodoroDailyAdjustments.collectAsState()
 
+    val taskChildSheetState by viewModel.taskChildSheetState.collectAsState()
+
+    val taskChildRequirements by viewModel.taskChildSheetRequirements.collectAsState()
+
+    val taskChildRequirementSummaries by viewModel.taskChildRequirementSummaries.collectAsState()
+
+    val taskChildRequirementPreviews by viewModel.taskChildRequirementPreviews.collectAsState()
 
     val timelineItemsReal = remember(allItems) { allItems.filter { !it.inPallet } }
+
+    val taskChildSummaryByOccurrenceKey = remember(
+        taskChildRequirementSummaries
+    ) {
+        taskChildRequirementSummaries.associateBy { summary ->
+            buildTaskChildOccurrenceKey(
+                parentTaskId = summary.parentTaskId,
+                scheduleId = summary.scheduleId,
+                parentRuleScheduleId = summary.parentRuleScheduleId,
+                occurrenceDateEpochDay = summary.occurrenceDateEpochDay
+            )
+        }
+    }
+
+    val taskChildPreviewsByOccurrenceKey = remember(
+        taskChildRequirementPreviews
+    ) {
+        taskChildRequirementPreviews.groupBy { requirement ->
+            buildTaskChildOccurrenceKey(
+                parentTaskId = requirement.parentTaskId,
+                scheduleId = requirement.scheduleId,
+                parentRuleScheduleId = requirement.parentRuleScheduleId,
+                occurrenceDateEpochDay = requirement.occurrenceDateEpochDay
+            )
+        }
+    }
 
     val overrideKeys = remember(timelineItemsReal) {
         // key = "ruleId|occurrenceDay"
@@ -178,6 +219,14 @@ fun ScheduleScreen(
     val numDays = 5
     val startDate = remember { LocalDate.now() } // یا هر startDate که تایم‌لاین‌ات دارد
     val endDate = remember(startDate) { startDate.plusDays((numDays - 1).toLong()) }
+
+    LaunchedEffect(startDate, endDate) {
+        viewModel.setTaskChildVisibleRange(
+            startEpochDay = startDate.toEpochDay(),
+            endEpochDay = endDate.toEpochDay()
+        )
+    }
+
 
     val today = remember { LocalDate.now() }
 
@@ -1045,6 +1094,14 @@ fun ScheduleScreen(
                                             .plusMinutes(pm.endMin.toLong())
                                     )
 
+                                    val childOccurrenceKey = buildTaskChildOccurrenceKeyForItem(item)
+
+                                    val childSummary =
+                                        taskChildSummaryByOccurrenceKey[childOccurrenceKey]
+
+                                    val childPreviewRequirements =
+                                        taskChildPreviewsByOccurrenceKey[childOccurrenceKey].orEmpty()
+
                                     TimelineItemBox(
                                         item = item,
                                         startDate = startDate,
@@ -1204,6 +1261,12 @@ fun ScheduleScreen(
                                             viewModel.startPomodoroNow(scheduleId)
                                             selectedScheduleId = null
                                         },
+                                        onOpenChildren = {
+                                            viewModel.openTaskChildSheet(displayItem)
+                                            selectedScheduleId = null
+                                        },
+                                        childRequirementSummary = childSummary,
+                                        childPreviewRequirements = childPreviewRequirements,
 
                                         )
                                 }
@@ -1500,6 +1563,30 @@ fun ScheduleScreen(
 
 
         }
+        taskChildSheetState?.let { state ->
+            val sheetState = rememberModalBottomSheetState(
+                skipPartiallyExpanded = true
+            )
+
+            ModalBottomSheet(
+                onDismissRequest = {
+                    viewModel.closeTaskChildSheet()
+                },
+                sheetState = sheetState
+            ) {
+                TaskChildRequirementsSheetContent(
+                    title = state.title,
+                    occurrenceDateEpochDay = state.occurrenceDateEpochDay,
+                    requirements = taskChildRequirements,
+                    onToggle = { requirementId, checked ->
+                        viewModel.toggleTaskChildRequirementCompleted(
+                            requirementId = requirementId,
+                            completed = checked
+                        )
+                    }
+                )
+            }
+        }
         if (showPermissionDialog) {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 AlertDialog(
@@ -1561,6 +1648,116 @@ fun ScheduleScreen(
     }
 }
 
+@Composable
+private fun TaskChildRequirementsSheetContent(
+    title: String,
+    occurrenceDateEpochDay: Long,
+    requirements: List<TaskChildRequirementUi>,
+    onToggle: (requirementId: Int, checked: Boolean) -> Unit
+) {
+    val completedCount = requirements.count {
+        it.status == TaskChildRequirementStatus.COMPLETE
+    }
+
+    val totalCount = requirements.size
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp)
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Right,
+            style = MaterialTheme.typography.titleLarge.copy(
+                textDirection = TextDirection.ContentOrRtl
+            )
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            text = "${convertToPersianDatePretty(LocalDate.ofEpochDay(occurrenceDateEpochDay))}  •  $completedCount/$totalCount",
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Right,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        HorizontalDivider()
+
+        Spacer(Modifier.height(8.dp))
+
+        if (requirements.isEmpty()) {
+            Text(
+                text = "برای این کارت هنوز زیرتسک قابل انجام وجود ندارد.",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(420.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(
+                    items = requirements,
+                    key = { it.requirementId }
+                ) { requirement ->
+                    val checked =
+                        requirement.status == TaskChildRequirementStatus.COMPLETE
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable {
+                                onToggle(
+                                    requirement.requirementId,
+                                    !checked
+                                )
+                            }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = requirement.childTitle,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Right,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                textDirection = TextDirection.ContentOrRtl
+                            ),
+                            color = if (checked) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = null
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+    }
+}
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1597,6 +1794,9 @@ private fun TimelineItemBox(
     onDelete: (scheduleId: Int) -> Unit,
     onMakeIndependent: () -> Unit,
     onStartPomodoroNow: (scheduleId: Int) -> Unit,
+    onOpenChildren: () -> Unit,
+    childRequirementSummary: TaskChildRequirementSummaryUi?,
+    childPreviewRequirements: List<TaskChildRequirementUi>,
 
 
     ) {
@@ -2300,7 +2500,80 @@ private fun TimelineItemBox(
                     }
                     .padding(start = 8.dp, top = innerTopPad, end = 8.dp, bottom = 8.dp)
             ) {
+                childRequirementSummary?.let { summary ->
+                    if (summary.totalCount > 0) {
+                        Text(
+                            text = "${summary.completedCount}/${summary.totalCount}",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Right,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
+                        )
 
+                        Spacer(Modifier.height(2.dp))
+                    }
+                }
+
+                val maxPreviewItems = when {
+                    taskH >= 160.dp -> 4
+                    taskH >= 120.dp -> 3
+                    taskH >= 86.dp -> 2
+                    taskH >= 64.dp -> 1
+                    else -> 0
+                }
+
+                if (maxPreviewItems > 0 && childPreviewRequirements.isNotEmpty()) {
+                    val visibleRequirements = childPreviewRequirements.take(maxPreviewItems)
+                    val hiddenCount = childPreviewRequirements.size - visibleRequirements.size
+
+                    visibleRequirements.forEach { requirement ->
+                        val checked =
+                            requirement.status == TaskChildRequirementStatus.COMPLETE
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (checked) "✓" else "○",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (checked) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f)
+                                }
+                            )
+
+                            Spacer(Modifier.width(4.dp))
+
+                            Text(
+                                text = requirement.childTitle,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Right,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    textDirection = TextDirection.ContentOrRtl
+                                ),
+                                color = if (checked) {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
+                                }
+                            )
+                        }
+                    }
+
+                    if (hiddenCount > 0) {
+                        Text(
+                            text = "+$hiddenCount",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Right,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f)
+                        )
+                    }
+                }
 
             }
 
@@ -2389,6 +2662,16 @@ private fun TimelineItemBox(
                     onDismissRequest = { menuExpanded = false }
                 ) {
                     if (isVirtual) {
+                        DropdownMenuItem(
+                            text = { Text("زیرتسک‌ها") },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Timeline, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onOpenChildren()
+                            }
+                        )
                         // ✅ فقط یک گزینه برای مجازی‌ها
                         DropdownMenuItem(
                             text = { Text("تبدیل به زمان‌بندی مستقل") },
@@ -2438,6 +2721,16 @@ private fun TimelineItemBox(
                             )
                         }
 
+                        DropdownMenuItem(
+                            text = { Text("زیرتسک‌ها") },
+                            leadingIcon = {
+                                Icon(Icons.Filled.Timeline, contentDescription = null)
+                            },
+                            onClick = {
+                                menuExpanded = false
+                                onOpenChildren()
+                            }
+                        )
 
                         // ✅ آیتم‌های واقعی: Move / Edit / Delete
                         DropdownMenuItem(
@@ -3274,6 +3567,50 @@ private fun computePreviousPomodoroEndMinById(
     return result
 }
 
+
+private fun buildTaskChildOccurrenceKey(
+    parentTaskId: Int,
+    scheduleId: Int?,
+    parentRuleScheduleId: Int?,
+    occurrenceDateEpochDay: Long?
+): String {
+    return "$parentTaskId|${scheduleId ?: "null"}|${parentRuleScheduleId ?: "null"}|${occurrenceDateEpochDay ?: "null"}"
+}
+
+private fun buildTaskChildOccurrenceKeyForItem(
+    item: ScheduleScreenItem
+): String {
+    val occurrenceDateEpochDay =
+        item.occurrenceDateEpochDay
+            ?: item.dateEpochDay
+            ?: item.start.toLocalDate().toEpochDay()
+
+    val isVirtualOccurrence =
+        item.parentRuleScheduleId != null &&
+                item.occurrenceDateEpochDay != null &&
+                (item.scheduleId < 0 || item.scheduleId == item.parentRuleScheduleId)
+
+    val realScheduleId =
+        if (!isVirtualOccurrence && item.scheduleId > 0) {
+            item.scheduleId
+        } else {
+            null
+        }
+
+    val ruleScheduleId =
+        if (realScheduleId == null) {
+            item.parentRuleScheduleId
+        } else {
+            null
+        }
+
+    return buildTaskChildOccurrenceKey(
+        parentTaskId = item.taskId,
+        scheduleId = realScheduleId,
+        parentRuleScheduleId = ruleScheduleId,
+        occurrenceDateEpochDay = occurrenceDateEpochDay
+    )
+}
 
 //>>>>>>>>>>>>>>>> Utils <<<<<<<<<<<<<<<<<<
 
