@@ -1827,7 +1827,22 @@ class TaskScreenViewModel @Inject constructor(
             )
 
             if (updated != null) {
+                val shouldCancelOpenRequirements =
+                    existing != null &&
+                            (
+                                    existing.ruleType != updated.ruleType ||
+                                            existing.timesPerDay != updated.timesPerDay ||
+                                            existing.timesPerOccurrence != updated.timesPerOccurrence ||
+                                            existing.g5TargetCount != updated.g5TargetCount ||
+                                            existing.targetCount != updated.targetCount ||
+                                            existing.resetScope != updated.resetScope
+                                    )
+
                 taskChildRepo.upsertRule(updated)
+
+                if (shouldCancelOpenRequirements) {
+                    existing?.id?.let { taskChildRepo.cancelOpenRequirementsByRuleId(it) }
+                }
             }
         }
     }

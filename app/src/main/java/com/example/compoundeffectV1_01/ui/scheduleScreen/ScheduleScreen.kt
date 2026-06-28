@@ -150,6 +150,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementContextType
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementStatus
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementSummaryUi
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementUi
@@ -181,29 +182,11 @@ fun ScheduleScreen(
 
     val timelineItemsReal = remember(allItems) { allItems.filter { !it.inPallet } }
 
-    val taskChildSummaryByOccurrenceKey = remember(
-        taskChildRequirementSummaries
-    ) {
-        taskChildRequirementSummaries.associateBy { summary ->
-            buildTaskChildOccurrenceKey(
-                parentTaskId = summary.parentTaskId,
-                scheduleId = summary.scheduleId,
-                parentRuleScheduleId = summary.parentRuleScheduleId,
-                occurrenceDateEpochDay = summary.occurrenceDateEpochDay
-            )
-        }
-    }
-
-    val taskChildPreviewsByOccurrenceKey = remember(
+    val taskChildRequirementsByParentTaskId = remember(
         taskChildRequirementPreviews
     ) {
         taskChildRequirementPreviews.groupBy { requirement ->
-            buildTaskChildOccurrenceKey(
-                parentTaskId = requirement.parentTaskId,
-                scheduleId = requirement.scheduleId,
-                parentRuleScheduleId = requirement.parentRuleScheduleId,
-                occurrenceDateEpochDay = requirement.occurrenceDateEpochDay
-            )
+            requirement.parentTaskId
         }
     }
 
@@ -1094,13 +1077,21 @@ fun ScheduleScreen(
                                             .plusMinutes(pm.endMin.toLong())
                                     )
 
-                                    val childOccurrenceKey = buildTaskChildOccurrenceKeyForItem(item)
+                                    val childPreviewRequirements =
+                                        taskChildRequirementsByParentTaskId[item.taskId]
+                                            .orEmpty()
+                                            .filter { requirement ->
+                                                requirementMatchesTimelineItem(
+                                                    requirement = requirement,
+                                                    item = item
+                                                )
+                                            }
 
                                     val childSummary =
-                                        taskChildSummaryByOccurrenceKey[childOccurrenceKey]
-
-                                    val childPreviewRequirements =
-                                        taskChildPreviewsByOccurrenceKey[childOccurrenceKey].orEmpty()
+                                        buildTaskChildRequirementSummaryForTimelineItem(
+                                            item = item,
+                                            requirements = childPreviewRequirements
+                                        )
 
                                     TimelineItemBox(
                                         item = item,
@@ -1712,6 +1703,28 @@ private fun TaskChildRequirementsSheetContent(
                     items = requirements,
                     key = { it.requirementId }
                 ) { requirement ->
+
+                    val now = System.currentTimeMillis()
+
+                    val isWaitingNotDue =
+                        requirement.status == TaskChildRequirementStatus.WAITING &&
+                                requirement.dueAtEpochMillis != null &&
+                                requirement.dueAtEpochMillis > now
+
+                    val learningText =
+                        if (requirement.learningTargetCount != null) {
+                            "  •  ${requirement.learningIndex + 1}/${requirement.learningTargetCount}"
+                        } else {
+                            ""
+                        }
+
+                    val waitingText =
+                        if (isWaitingNotDue) {
+                            "  •  waiting"
+                        } else {
+                            ""
+                        }
+
                     val checked =
                         requirement.status == TaskChildRequirementStatus.COMPLETE
 
@@ -1719,7 +1732,9 @@ private fun TaskChildRequirementsSheetContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable {
+                            .clickable(
+                                enabled = !isWaitingNotDue
+                            ) {
                                 onToggle(
                                     requirement.requirementId,
                                     !checked
@@ -1729,7 +1744,7 @@ private fun TaskChildRequirementsSheetContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = requirement.childTitle,
+                            text = requirement.childTitle + learningText + waitingText,
                             modifier = Modifier.weight(1f),
                             textAlign = TextAlign.Right,
                             maxLines = 2,
@@ -1737,10 +1752,10 @@ private fun TaskChildRequirementsSheetContent(
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 textDirection = TextDirection.ContentOrRtl
                             ),
-                            color = if (checked) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
+                            color = when {
+                                checked -> MaterialTheme.colorScheme.onSurfaceVariant
+                                isWaitingNotDue -> MaterialTheme.colorScheme.onSurfaceVariant
+                                else -> MaterialTheme.colorScheme.onSurface
                             }
                         )
 
@@ -1748,6 +1763,7 @@ private fun TaskChildRequirementsSheetContent(
 
                         Checkbox(
                             checked = checked,
+                            enabled = !isWaitingNotDue,
                             onCheckedChange = null
                         )
                     }
@@ -3609,6 +3625,104 @@ private fun buildTaskChildOccurrenceKeyForItem(
         scheduleId = realScheduleId,
         parentRuleScheduleId = ruleScheduleId,
         occurrenceDateEpochDay = occurrenceDateEpochDay
+    )
+}
+
+private fun requirementMatchesTimelineItem(
+    requirement: TaskChildRequirementUi,
+    item: ScheduleScreenItem
+): Boolean {
+    if (requirement.parentTaskId != item.taskId) return false
+    if (requirement.status == TaskChildRequirementStatus.CANCELLED) return false
+
+    val occurrenceDateEpochDay =
+        item.occurrenceDateEpochDay
+            ?: item.dateEpochDay
+            ?: item.start.toLocalDate().toEpochDay()
+
+    val isVirtualOccurrence =
+        item.parentRuleScheduleId != null &&
+                item.occurrenceDateEpochDay != null &&
+                (item.scheduleId < 0 || item.scheduleId == item.parentRuleScheduleId)
+
+    val realScheduleId =
+        if (!isVirtualOccurrence && item.scheduleId > 0) {
+            item.scheduleId
+        } else {
+            null
+        }
+
+    val ruleScheduleId =
+        if (realScheduleId == null) {
+            item.parentRuleScheduleId
+        } else {
+            null
+        }
+
+    return when (requirement.contextType) {
+        TaskChildRequirementContextType.SCHEDULE_OCCURRENCE ->
+            requirement.scheduleId == realScheduleId &&
+                    requirement.occurrenceDateEpochDay == occurrenceDateEpochDay
+
+        TaskChildRequirementContextType.RULE_OCCURRENCE ->
+            requirement.parentRuleScheduleId == ruleScheduleId &&
+                    requirement.occurrenceDateEpochDay == occurrenceDateEpochDay
+
+        TaskChildRequirementContextType.DAY ->
+            requirement.occurrenceDateEpochDay == occurrenceDateEpochDay
+
+        TaskChildRequirementContextType.PARENT_LIFETIME,
+        TaskChildRequirementContextType.LEARNING_CYCLE,
+        TaskChildRequirementContextType.MANUAL ->
+            true
+
+        TaskChildRequirementContextType.LIST_SESSION ->
+            false
+
+        else ->
+            false
+    }
+}
+
+private fun buildTaskChildRequirementSummaryForTimelineItem(
+    item: ScheduleScreenItem,
+    requirements: List<TaskChildRequirementUi>
+): TaskChildRequirementSummaryUi? {
+    if (requirements.isEmpty()) return null
+
+    val occurrenceDateEpochDay =
+        item.occurrenceDateEpochDay
+            ?: item.dateEpochDay
+            ?: item.start.toLocalDate().toEpochDay()
+
+    val isVirtualOccurrence =
+        item.parentRuleScheduleId != null &&
+                item.occurrenceDateEpochDay != null &&
+                (item.scheduleId < 0 || item.scheduleId == item.parentRuleScheduleId)
+
+    val realScheduleId =
+        if (!isVirtualOccurrence && item.scheduleId > 0) {
+            item.scheduleId
+        } else {
+            null
+        }
+
+    val ruleScheduleId =
+        if (realScheduleId == null) {
+            item.parentRuleScheduleId
+        } else {
+            null
+        }
+
+    return TaskChildRequirementSummaryUi(
+        parentTaskId = item.taskId,
+        scheduleId = realScheduleId,
+        parentRuleScheduleId = ruleScheduleId,
+        occurrenceDateEpochDay = occurrenceDateEpochDay,
+        totalCount = requirements.size,
+        completedCount = requirements.count {
+            it.status == TaskChildRequirementStatus.COMPLETE
+        }
     )
 }
 

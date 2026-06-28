@@ -145,22 +145,15 @@ class ScheduleScreenViewModel @Inject constructor(
     val taskChildSheetRequirements: StateFlow<List<TaskChildRequirementUi>> =
         _taskChildSheetState
             .flatMapLatest { state ->
-                when {
-                    state == null -> flowOf(emptyList())
-
-                    state.scheduleId != null ->
-                        taskChildRepo.observeRequirementUiByScheduleOccurrence(
-                            scheduleId = state.scheduleId,
-                            occurrenceDateEpochDay = state.occurrenceDateEpochDay
-                        )
-
-                    state.parentRuleScheduleId != null ->
-                        taskChildRepo.observeRequirementUiByRuleOccurrence(
-                            parentRuleScheduleId = state.parentRuleScheduleId,
-                            occurrenceDateEpochDay = state.occurrenceDateEpochDay
-                        )
-
-                    else -> flowOf(emptyList())
+                if (state == null) {
+                    flowOf(emptyList())
+                } else {
+                    taskChildRepo.observeRequirementUiForParentOccurrence(
+                        parentTaskId = state.parentTaskId,
+                        scheduleId = state.scheduleId,
+                        parentRuleScheduleId = state.parentRuleScheduleId,
+                        occurrenceDateEpochDay = state.occurrenceDateEpochDay
+                    )
                 }
             }
             .stateIn(
@@ -225,8 +218,17 @@ class ScheduleScreenViewModel @Inject constructor(
                     .mapNotNull { item ->
                         val parentTaskId = item.taskId
 
-                        val realScheduleId = item.scheduleId
-                            .takeIf { it > 0 }
+                        val isVirtualOccurrence =
+                            item.parentRuleScheduleId != null &&
+                                    item.occurrenceDateEpochDay != null &&
+                                    (item.scheduleId < 0 || item.scheduleId == item.parentRuleScheduleId)
+
+                        val realScheduleId =
+                            if (!isVirtualOccurrence && item.scheduleId > 0) {
+                                item.scheduleId
+                            } else {
+                                null
+                            }
 
                         val virtualParentRuleScheduleId =
                             if (realScheduleId == null) {

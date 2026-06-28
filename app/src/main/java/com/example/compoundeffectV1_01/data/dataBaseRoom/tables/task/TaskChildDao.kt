@@ -318,6 +318,13 @@ interface TaskChildDao {
                 updatedAt = now
             )
         }
+
+        if (completed) {
+            createNextLearningRequirementIfNeeded(
+                completedRequirement = requirement,
+                completedAt = now
+            )
+        }
     }
 
     @Query("""
@@ -384,6 +391,8 @@ interface TaskChildDao {
         }
     }
 
+
+
     @Transaction
     suspend fun ensureRequirementsForParentOccurrence(
         parentTaskId: Int,
@@ -397,25 +406,81 @@ interface TaskChildDao {
 
         val rules = getEnabledRulesByParentTaskId(parentTaskId)
 
-        val contextType = if (scheduleId != null) {
+        val occurrenceContextType = if (scheduleId != null) {
             TaskChildRequirementContextType.SCHEDULE_OCCURRENCE
         } else {
             TaskChildRequirementContextType.RULE_OCCURRENCE
         }
 
         for (rule in rules) {
-            val slotCount = when (rule.ruleType) {
-                TaskChildRuleType.ONCE_PER_PARENT_OCCURRENCE -> 1
+            var contextType = occurrenceContextType
+            var effectiveScheduleId = scheduleId
+            var effectiveParentRuleScheduleId = parentRuleScheduleId
+            var effectiveOccurrenceDateEpochDay: Long? = occurrenceDateEpochDay
+            var slotCount = 0
+            var learningTargetCount: Int? = null
 
-                TaskChildRuleType.N_TIMES_PER_PARENT_OCCURRENCE ->
-                    rule.timesPerOccurrence.coerceAtLeast(1)
+            when (rule.ruleType) {
+                TaskChildRuleType.ONCE_PER_PARENT_OCCURRENCE -> {
+                    contextType = occurrenceContextType
+                    effectiveScheduleId = scheduleId
+                    effectiveParentRuleScheduleId = parentRuleScheduleId
+                    effectiveOccurrenceDateEpochDay = occurrenceDateEpochDay
+                    slotCount = 1
+                }
 
-                TaskChildRuleType.ONCE_PER_DAY -> 1
+                TaskChildRuleType.N_TIMES_PER_PARENT_OCCURRENCE -> {
+                    contextType = occurrenceContextType
+                    effectiveScheduleId = scheduleId
+                    effectiveParentRuleScheduleId = parentRuleScheduleId
+                    effectiveOccurrenceDateEpochDay = occurrenceDateEpochDay
+                    slotCount = rule.timesPerOccurrence.coerceAtLeast(1)
+                }
 
-                TaskChildRuleType.N_TIMES_PER_DAY ->
-                    rule.timesPerDay.coerceAtLeast(1)
+                TaskChildRuleType.ONCE_PER_DAY -> {
+                    contextType = TaskChildRequirementContextType.DAY
+                    effectiveScheduleId = null
+                    effectiveParentRuleScheduleId = null
+                    effectiveOccurrenceDateEpochDay = occurrenceDateEpochDay
+                    slotCount = 1
+                }
 
-                else -> 0
+                TaskChildRuleType.N_TIMES_PER_DAY -> {
+                    contextType = TaskChildRequirementContextType.DAY
+                    effectiveScheduleId = null
+                    effectiveParentRuleScheduleId = null
+                    effectiveOccurrenceDateEpochDay = occurrenceDateEpochDay
+                    slotCount = rule.timesPerDay.coerceAtLeast(1)
+                }
+
+                TaskChildRuleType.ONCE_PER_PARENT_LIFETIME -> {
+                    contextType = TaskChildRequirementContextType.PARENT_LIFETIME
+                    effectiveScheduleId = null
+                    effectiveParentRuleScheduleId = null
+                    effectiveOccurrenceDateEpochDay = null
+                    slotCount = 1
+                }
+
+                TaskChildRuleType.G5_LEARNING -> {
+                    contextType = TaskChildRequirementContextType.LEARNING_CYCLE
+                    effectiveScheduleId = null
+                    effectiveParentRuleScheduleId = null
+                    effectiveOccurrenceDateEpochDay = null
+                    slotCount = 1
+                    learningTargetCount = rule.g5TargetCount.coerceAtLeast(1)
+                }
+
+                TaskChildRuleType.MANUAL_RESET -> {
+                    contextType = TaskChildRequirementContextType.MANUAL
+                    effectiveScheduleId = null
+                    effectiveParentRuleScheduleId = null
+                    effectiveOccurrenceDateEpochDay = null
+                    slotCount = 1
+                }
+
+                TaskChildRuleType.MANUAL_LIST_ITEM -> {
+                    slotCount = 0
+                }
             }
 
             if (slotCount <= 0) continue
@@ -427,14 +492,15 @@ interface TaskChildDao {
                     append("|ctx:")
                     append(contextType)
                     append("|schedule:")
-                    append(scheduleId ?: "null")
+                    append(effectiveScheduleId ?: "null")
                     append("|parentRule:")
-                    append(parentRuleScheduleId ?: "null")
+                    append(effectiveParentRuleScheduleId ?: "null")
                     append("|date:")
-                    append(occurrenceDateEpochDay)
+                    append(effectiveOccurrenceDateEpochDay ?: "null")
                     append("|slot:")
                     append(slotIndex)
-                    append("|learn:0")
+                    append("|learn:")
+                    append(0)
                 }
 
                 val existing = getRequirementByUniqueKey(uniqueKey)
@@ -447,13 +513,13 @@ interface TaskChildDao {
                         parentTaskId = parentTaskId,
                         childTaskId = rule.childTaskId,
                         contextType = contextType,
-                        scheduleId = scheduleId,
-                        parentRuleScheduleId = parentRuleScheduleId,
-                        occurrenceDateEpochDay = occurrenceDateEpochDay,
+                        scheduleId = effectiveScheduleId,
+                        parentRuleScheduleId = effectiveParentRuleScheduleId,
+                        occurrenceDateEpochDay = effectiveOccurrenceDateEpochDay,
                         listSessionId = null,
                         slotIndex = slotIndex,
                         learningIndex = 0,
-                        learningTargetCount = null,
+                        learningTargetCount = learningTargetCount,
                         status = TaskChildRequirementStatus.INCOMPLETE,
                         sourceCatalogItemId = rule.sourceCatalogItemId
                     )
@@ -461,6 +527,8 @@ interface TaskChildDao {
             }
         }
     }
+
+
 
     @Query("""
     SELECT 
@@ -633,15 +701,16 @@ interface TaskChildDao {
         r.sourceCatalogItemId AS sourceCatalogItemId
     FROM task_child_requirement r
     INNER JOIN task t ON t.id = r.childTaskId
-    WHERE r.occurrenceDateEpochDay BETWEEN :startEpochDay AND :endEpochDay
-      AND r.status != 'CANCELLED'
+    WHERE r.status != 'CANCELLED'
+      AND (
+            r.occurrenceDateEpochDay BETWEEN :startEpochDay AND :endEpochDay
+            OR r.contextType IN ('PARENT_LIFETIME', 'LEARNING_CYCLE', 'MANUAL')
+      )
     ORDER BY 
         r.parentTaskId ASC,
-        r.scheduleId ASC,
-        r.parentRuleScheduleId ASC,
-        r.occurrenceDateEpochDay ASC,
         t.siblingIndex ASC,
         t.id ASC,
+        r.contextType ASC,
         r.slotIndex ASC,
         r.learningIndex ASC,
         r.id ASC
@@ -650,4 +719,211 @@ interface TaskChildDao {
         startEpochDay: Long,
         endEpochDay: Long
     ): Flow<List<TaskChildRequirementUi>>
+
+    @Query("""
+    UPDATE task_child_requirement
+    SET status = 'CANCELLED',
+        updatedAtEpochMillis = :updatedAt
+    WHERE ruleId = :ruleId
+      AND status IN ('WAITING', 'INCOMPLETE')
+""")
+    suspend fun cancelOpenRequirementsByRuleId(
+        ruleId: Int,
+        updatedAt: Long = System.currentTimeMillis()
+    )
+
+    @Query("""
+    SELECT 
+        r.id AS requirementId,
+        r.ruleId AS ruleId,
+        r.parentTaskId AS parentTaskId,
+        r.childTaskId AS childTaskId,
+
+        t.name AS childTitle,
+        t.color AS childColor,
+
+        r.contextType AS contextType,
+
+        r.scheduleId AS scheduleId,
+        r.parentRuleScheduleId AS parentRuleScheduleId,
+        r.occurrenceDateEpochDay AS occurrenceDateEpochDay,
+        r.listSessionId AS listSessionId,
+
+        r.slotIndex AS slotIndex,
+        r.learningIndex AS learningIndex,
+        r.learningTargetCount AS learningTargetCount,
+
+        r.status AS status,
+
+        r.dueAtEpochMillis AS dueAtEpochMillis,
+        r.expiresAtEpochMillis AS expiresAtEpochMillis,
+        r.completedAtEpochMillis AS completedAtEpochMillis,
+
+        r.sourceCatalogItemId AS sourceCatalogItemId
+    FROM task_child_requirement r
+    INNER JOIN task t ON t.id = r.childTaskId
+    WHERE r.parentTaskId = :parentTaskId
+      AND r.status != 'CANCELLED'
+      AND (
+            (
+                r.contextType = 'SCHEDULE_OCCURRENCE'
+                AND r.scheduleId = :scheduleId
+                AND r.occurrenceDateEpochDay = :occurrenceDateEpochDay
+            )
+            OR
+            (
+                r.contextType = 'RULE_OCCURRENCE'
+                AND r.parentRuleScheduleId = :parentRuleScheduleId
+                AND r.occurrenceDateEpochDay = :occurrenceDateEpochDay
+            )
+            OR
+            (
+                r.contextType = 'DAY'
+                AND r.occurrenceDateEpochDay = :occurrenceDateEpochDay
+            )
+            OR
+            (
+                r.contextType = 'PARENT_LIFETIME'
+            )
+            OR
+            (
+                r.contextType = 'LEARNING_CYCLE'
+            )
+            OR
+            (
+                r.contextType = 'MANUAL'
+            )
+      )
+    ORDER BY 
+        t.siblingIndex ASC,
+        t.id ASC,
+        r.contextType ASC,
+        r.slotIndex ASC,
+        r.learningIndex ASC,
+        r.id ASC
+""")
+    fun observeRequirementUiForParentOccurrence(
+        parentTaskId: Int,
+        scheduleId: Int?,
+        parentRuleScheduleId: Int?,
+        occurrenceDateEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>>
+
+
+    @Query("""
+    SELECT * FROM task_child_rule
+    WHERE id = :ruleId
+    LIMIT 1
+""")
+    suspend fun getRuleById(
+        ruleId: Int
+    ): TaskChildRuleEntity?
+
+    fun buildLearningRequirementUniqueKey(
+        ruleId: Int,
+        learningIndex: Int
+    ): String {
+        return buildString {
+            append("rule:")
+            append(ruleId)
+            append("|ctx:")
+            append(TaskChildRequirementContextType.LEARNING_CYCLE)
+            append("|schedule:null")
+            append("|parentRule:null")
+            append("|date:null")
+            append("|slot:0")
+            append("|learn:")
+            append(learningIndex)
+        }
+    }
+
+    fun g5DelayDaysForIndex(
+        rule: TaskChildRuleEntity,
+        learningIndex: Int
+    ): Int {
+        val custom = rule.g5IntervalDaysCsv
+            ?.split(",")
+            ?.mapNotNull { it.trim().toIntOrNull() }
+            ?.filter { it >= 0 }
+            .orEmpty()
+
+        val default = listOf(0, 1, 2, 4, 7, 14, 30)
+
+        val source = if (custom.isNotEmpty()) custom else default
+
+        return source.getOrNull(learningIndex)
+            ?: source.lastOrNull()
+            ?: 0
+    }
+
+    @Transaction
+    suspend fun createNextLearningRequirementIfNeeded(
+        completedRequirement: TaskChildRequirementEntity,
+        completedAt: Long
+    ) {
+        if (completedRequirement.contextType != TaskChildRequirementContextType.LEARNING_CYCLE) {
+            return
+        }
+
+        val rule = getRuleById(completedRequirement.ruleId) ?: return
+
+        if (rule.ruleType != TaskChildRuleType.G5_LEARNING) {
+            return
+        }
+
+        val targetCount =
+            completedRequirement.learningTargetCount
+                ?: rule.g5TargetCount.coerceAtLeast(1)
+
+        val currentIndex = completedRequirement.learningIndex
+        val nextIndex = currentIndex + 1
+
+        if (nextIndex >= targetCount) {
+            return
+        }
+
+        val nextUniqueKey = buildLearningRequirementUniqueKey(
+            ruleId = rule.id,
+            learningIndex = nextIndex
+        )
+
+        val existingNext = getRequirementByUniqueKey(nextUniqueKey)
+        if (existingNext != null) {
+            return
+        }
+
+        val delayDays = g5DelayDaysForIndex(
+            rule = rule,
+            learningIndex = nextIndex
+        )
+
+        val dueAt = completedAt + delayDays * 24L * 60L * 60L * 1000L
+
+        val nextStatus =
+            if (dueAt <= completedAt) {
+                TaskChildRequirementStatus.INCOMPLETE
+            } else {
+                TaskChildRequirementStatus.WAITING
+            }
+
+        upsertRequirement(
+            TaskChildRequirementEntity(
+                uniqueKey = nextUniqueKey,
+                ruleId = rule.id,
+                parentTaskId = completedRequirement.parentTaskId,
+                childTaskId = completedRequirement.childTaskId,
+                contextType = TaskChildRequirementContextType.LEARNING_CYCLE,
+                scheduleId = null,
+                parentRuleScheduleId = null,
+                occurrenceDateEpochDay = null,
+                listSessionId = null,
+                slotIndex = 0,
+                learningIndex = nextIndex,
+                learningTargetCount = targetCount,
+                status = nextStatus,
+                dueAtEpochMillis = dueAt,
+                sourceCatalogItemId = rule.sourceCatalogItemId
+            )
+        )
+    }
 }

@@ -196,4 +196,24 @@ class TaskChildRepositoryImpl @Inject constructor(
     ): Flow<List<TaskChildRuleEntity>> =
         taskChildDao.observeRulesByChildTaskId(childTaskId)
 
+    override suspend fun cancelOpenRequirementsByRuleId(
+        ruleId: Int
+    ) =
+        taskChildDao.cancelOpenRequirementsByRuleId(ruleId)
+
+    override fun observeRequirementUiForParentOccurrence(
+        parentTaskId: Int,
+        scheduleId: Int?,
+        parentRuleScheduleId: Int?,
+        occurrenceDateEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>> =
+        taskChildDao.observeRequirementUiForParentOccurrence(
+            parentTaskId = parentTaskId,
+            scheduleId = scheduleId,
+            parentRuleScheduleId = parentRuleScheduleId,
+            occurrenceDateEpochDay = occurrenceDateEpochDay
+        )
+
+
+
 }

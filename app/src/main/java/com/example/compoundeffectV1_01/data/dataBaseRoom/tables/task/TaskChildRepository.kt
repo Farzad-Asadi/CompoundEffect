@@ -126,4 +126,15 @@ interface TaskChildRepository {
     fun observeRulesByChildTaskId(
         childTaskId: Int
     ): Flow<List<TaskChildRuleEntity>>
+
+    suspend fun cancelOpenRequirementsByRuleId(
+        ruleId: Int
+    )
+
+    fun observeRequirementUiForParentOccurrence(
+        parentTaskId: Int,
+        scheduleId: Int?,
+        parentRuleScheduleId: Int?,
+        occurrenceDateEpochDay: Long
+    ): Flow<List<TaskChildRequirementUi>>
 }
