@@ -148,6 +148,9 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRequirementContextType
@@ -157,6 +160,15 @@ import com.example.compoundeffectV1_01.data.dataBaseRoom.tables.task.TaskChildRe
 import androidx.compose.material.icons.filled.Settings as SettingsIcon
 import com.example.compoundeffectV1_01.data.notification.PomodoroNotifications
 import com.example.compoundeffectV1_01.utils.colorFromHex
+import java.time.ZoneId
+import kotlin.math.PI
+import kotlin.math.acos
+import kotlin.math.asin
+import kotlin.math.atan
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.sin
+import kotlin.math.tan
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1072,34 +1084,66 @@ fun ScheduleScreen(
                             val totalWidth = dayWidthDp * numDays
                             val colorFor = MaterialTheme.colorScheme.outlineVariant
 
-                            // پس‌زمینه Grid + خطوط
+                            // پس‌زمینه Grid + شب/روز + خطوط
                             Box(
                                 modifier = Modifier
                                     .width(totalWidth)
                                     .height(totalHeight)
                                     .drawBehind {
+                                        // ✅ اول بک‌گراند شب/روز سقز را بکش؛ خطوط و کارت‌ها روی آن می‌آیند.
+                                        drawSaqqezDayNightTimelineBackground(
+                                            startDate = startDate,
+                                            numDays = numDays,
+                                            dayWidthDp = dayWidthDp,
+                                            hourHeightDp = hourHeightDp
+                                        )
+
                                         val hourH = hourHeightDp.toPx()
                                         val dayW = dayWidthDp.toPx()
+
+                                        val gridHaloColor = Color.White.copy(alpha = 0.42f)
+                                        val gridHaloStroke = 3.dp.toPx()
+                                        val gridMainStroke = 1.dp.toPx()
 
                                         // خطوط افقی ساعت
                                         repeat(24) { i ->
                                             val y = i * hourH
+
+                                            // halo روشن: در روز تقریباً محو است، در شب مرز ساعت‌ها را زنده می‌کند
+                                            drawLine(
+                                                color = gridHaloColor,
+                                                start = Offset(0f, y),
+                                                end = Offset(size.width, y),
+                                                strokeWidth = gridHaloStroke
+                                            )
+
+                                            // خط اصلی فعلی
                                             drawLine(
                                                 color = colorFor,
                                                 start = Offset(0f, y),
                                                 end = Offset(size.width, y),
-                                                strokeWidth = 1.dp.toPx()
+                                                strokeWidth = gridMainStroke
                                             )
                                         }
 
                                         // خطوط عمودی روزها
                                         repeat(numDays + 1) { i ->
                                             val x = i * dayW
+
+                                            // halo روشن برای دیده‌شدن مرز روزها روی پس‌زمینه شب
+                                            drawLine(
+                                                color = gridHaloColor,
+                                                start = Offset(x, 0f),
+                                                end = Offset(x, size.height),
+                                                strokeWidth = gridHaloStroke
+                                            )
+
+                                            // خط اصلی فعلی
                                             drawLine(
                                                 color = colorFor,
                                                 start = Offset(x, 0f),
                                                 end = Offset(x, size.height),
-                                                strokeWidth = 1.dp.toPx()
+                                                strokeWidth = gridMainStroke
                                             )
                                         }
                                     }
@@ -3951,6 +3995,312 @@ private const val ZOOM_MAX = 10.0f
 
 private const val OVERLAP_MAX_LEVEL = 3            // 0..3  => 4 لایه
 private const val OVERLAP_STEP_FRAC = 0.25f        // هر لایه 1/4 عرض جابه‌جا + کوچک می‌شود
+
+private const val SUN_OFFICIAL_ZENITH_DEGREES = 90.833
+private const val TWILIGHT_BLEND_MINUTES = 35
+
+private val SAQQEZ_TIMELINE_LIGHT_LOCATION = TimelineLightLocation(
+    latitude = 36.2499,
+    longitude = 46.2735,
+    zoneId = ZoneId.of("Asia/Tehran")
+)
+
+private data class TimelineLightLocation(
+    val latitude: Double,
+    val longitude: Double,
+    val zoneId: ZoneId
+)
+
+private data class TimelineSunWindow(
+    val sunriseMinute: Int,
+    val sunsetMinute: Int
+)
+
+private fun DrawScope.drawSaqqezDayNightTimelineBackground(
+    startDate: LocalDate,
+    numDays: Int,
+    dayWidthDp: Dp,
+    hourHeightDp: Dp,
+    location: TimelineLightLocation = SAQQEZ_TIMELINE_LIGHT_LOCATION,
+    twilightMinutes: Int = TWILIGHT_BLEND_MINUTES
+) {
+    val dayW = dayWidthDp.toPx()
+    val hourH = hourHeightDp.toPx()
+    val dayHeight = hourH * 24f
+
+    val nightColor = Color(0xFF071B3A).copy(alpha = 0.24f)
+    val nightSoftColor = Color(0xFF0E2B55).copy(alpha = 0.18f)
+    val transitionLineColor = Color(0xFFFFD166).copy(alpha = 0.22f)
+
+    fun yOfMinute(minute: Int): Float {
+        return hourH * (minute.coerceIn(DAY_MIN, DAY_MAX) / 60f)
+    }
+
+    fun drawMinuteRect(
+        dayX: Float,
+        fromMinute: Int,
+        toMinute: Int,
+        color: Color
+    ) {
+        val from = fromMinute.coerceIn(DAY_MIN, DAY_MAX)
+        val to = toMinute.coerceIn(DAY_MIN, DAY_MAX)
+        if (to <= from) return
+
+        val top = yOfMinute(from)
+        val bottom = yOfMinute(to)
+
+        drawRect(
+            color = color,
+            topLeft = Offset(dayX, top),
+            size = Size(dayW, bottom - top)
+        )
+    }
+
+    fun drawMinuteGradient(
+        dayX: Float,
+        fromMinute: Int,
+        toMinute: Int,
+        colors: List<Color>
+    ) {
+        val from = fromMinute.coerceIn(DAY_MIN, DAY_MAX)
+        val to = toMinute.coerceIn(DAY_MIN, DAY_MAX)
+        if (to <= from) return
+
+        val top = yOfMinute(from)
+        val bottom = yOfMinute(to)
+
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = colors,
+                startY = top,
+                endY = bottom
+            ),
+            topLeft = Offset(dayX, top),
+            size = Size(dayW, bottom - top)
+        )
+    }
+
+    repeat(numDays) { dayIndex ->
+        val date = startDate.plusDays(dayIndex.toLong())
+        val sunWindow = calculateTimelineSunWindow(
+            date = date,
+            location = location
+        )
+
+        val dayX = dayIndex * dayW
+
+        val sunriseStart = sunWindow.sunriseMinute - twilightMinutes
+        val sunriseEnd = sunWindow.sunriseMinute + twilightMinutes
+
+        val sunsetStart = sunWindow.sunsetMinute - twilightMinutes
+        val sunsetEnd = sunWindow.sunsetMinute + twilightMinutes
+
+        // نیمه‌شب تا قبل از روشن‌شدن تدریجی هوا
+        drawMinuteRect(
+            dayX = dayX,
+            fromMinute = DAY_MIN,
+            toMinute = sunriseStart,
+            color = nightColor
+        )
+
+        // گرادیان طلوع: شب → روز
+        drawMinuteGradient(
+            dayX = dayX,
+            fromMinute = sunriseStart,
+            toMinute = sunriseEnd,
+            colors = listOf(
+                nightColor,
+                nightSoftColor,
+                Color.Transparent
+            )
+        )
+
+        // گرادیان غروب: روز → شب
+        drawMinuteGradient(
+            dayX = dayX,
+            fromMinute = sunsetStart,
+            toMinute = sunsetEnd,
+            colors = listOf(
+                Color.Transparent,
+                nightSoftColor,
+                nightColor
+            )
+        )
+
+        // بعد از تاریک‌شدن تدریجی هوا تا آخر شب
+        drawMinuteRect(
+            dayX = dayX,
+            fromMinute = sunsetEnd,
+            toMinute = DAY_MAX,
+            color = nightColor
+        )
+
+        // خط خیلی ظریف روی خود لحظه‌ی طلوع
+        val sunriseY = yOfMinute(sunWindow.sunriseMinute)
+        drawLine(
+            color = transitionLineColor,
+            start = Offset(dayX, sunriseY),
+            end = Offset(dayX + dayW, sunriseY),
+            strokeWidth = 1.dp.toPx()
+        )
+
+        // خط خیلی ظریف روی خود لحظه‌ی غروب
+        val sunsetY = yOfMinute(sunWindow.sunsetMinute)
+        drawLine(
+            color = transitionLineColor,
+            start = Offset(dayX, sunsetY),
+            end = Offset(dayX + dayW, sunsetY),
+            strokeWidth = 1.dp.toPx()
+        )
+    }
+}
+
+private fun calculateTimelineSunWindow(
+    date: LocalDate,
+    location: TimelineLightLocation
+): TimelineSunWindow {
+    val sunrise = calculateTimelineSunEventMinute(
+        date = date,
+        location = location,
+        isSunrise = true
+    )
+
+    val sunset = calculateTimelineSunEventMinute(
+        date = date,
+        location = location,
+        isSunrise = false
+    )
+
+    return TimelineSunWindow(
+        sunriseMinute = sunrise ?: 6 * 60,
+        sunsetMinute = sunset ?: 18 * 60
+    )
+}
+
+private fun calculateTimelineSunEventMinute(
+    date: LocalDate,
+    location: TimelineLightLocation,
+    isSunrise: Boolean
+): Int? {
+    val dayOfYear = date.dayOfYear.toDouble()
+    val longitudeHour = location.longitude / 15.0
+
+    val approximateTime = if (isSunrise) {
+        dayOfYear + ((6.0 - longitudeHour) / 24.0)
+    } else {
+        dayOfYear + ((18.0 - longitudeHour) / 24.0)
+    }
+
+    val meanAnomaly = (0.9856 * approximateTime) - 3.289
+
+    val trueLongitude = normalizeTimelineDegrees(
+        meanAnomaly +
+                (1.916 * sinTimelineDegrees(meanAnomaly)) +
+                (0.020 * sinTimelineDegrees(2.0 * meanAnomaly)) +
+                282.634
+    )
+
+    var rightAscension = radiansToTimelineDegrees(
+        atan(0.91764 * tanTimelineDegrees(trueLongitude))
+    )
+
+    rightAscension = normalizeTimelineDegrees(rightAscension)
+
+    val longitudeQuadrant = floor(trueLongitude / 90.0) * 90.0
+    val rightAscensionQuadrant = floor(rightAscension / 90.0) * 90.0
+
+    rightAscension += longitudeQuadrant - rightAscensionQuadrant
+    rightAscension /= 15.0
+
+    val sinDeclination = 0.39782 * sinTimelineDegrees(trueLongitude)
+    val cosDeclination = cos(asin(sinDeclination))
+
+    val cosHourAngle =
+        (cosTimelineDegrees(SUN_OFFICIAL_ZENITH_DEGREES) -
+                (sinDeclination * sinTimelineDegrees(location.latitude))) /
+                (cosDeclination * cosTimelineDegrees(location.latitude))
+
+    if (cosHourAngle > 1.0 || cosHourAngle < -1.0) {
+        return null
+    }
+
+    var hourAngle = radiansToTimelineDegrees(acos(cosHourAngle))
+
+    if (isSunrise) {
+        hourAngle = 360.0 - hourAngle
+    }
+
+    hourAngle /= 15.0
+
+    val localMeanTime =
+        hourAngle +
+                rightAscension -
+                (0.06571 * approximateTime) -
+                6.622
+
+    val utcHour = normalizeTimelineHours(localMeanTime - longitudeHour)
+
+    val offsetMinutes = date
+        .atTime(12, 0)
+        .atZone(location.zoneId)
+        .offset
+        .totalSeconds / 60
+
+    val localMinute = ((utcHour * 60.0) + offsetMinutes).roundToInt()
+
+    return floorModTimelineDayMinute(localMinute)
+}
+
+private fun degreesToTimelineRadians(
+    degrees: Double
+): Double {
+    return degrees * PI / 180.0
+}
+
+private fun radiansToTimelineDegrees(
+    radians: Double
+): Double {
+    return radians * 180.0 / PI
+}
+
+private fun sinTimelineDegrees(
+    degrees: Double
+): Double {
+    return sin(degreesToTimelineRadians(degrees))
+}
+
+private fun cosTimelineDegrees(
+    degrees: Double
+): Double {
+    return cos(degreesToTimelineRadians(degrees))
+}
+
+private fun tanTimelineDegrees(
+    degrees: Double
+): Double {
+    return tan(degreesToTimelineRadians(degrees))
+}
+
+private fun normalizeTimelineDegrees(
+    degrees: Double
+): Double {
+    val value = degrees % 360.0
+    return if (value < 0.0) value + 360.0 else value
+}
+
+private fun normalizeTimelineHours(
+    hours: Double
+): Double {
+    val value = hours % 24.0
+    return if (value < 0.0) value + 24.0 else value
+}
+
+private fun floorModTimelineDayMinute(
+    minute: Int
+): Int {
+    val value = minute % DAY_MAX
+    return if (value < 0) value + DAY_MAX else value
+}
 
 
 private fun zoomStep(z: Float) = when {
